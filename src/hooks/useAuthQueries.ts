@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 import { useCurrentUser } from '@/hooks/graphql/useUsersQuery'
 import { useMyPermissions } from '@/hooks/graphql/usePermissionsQuery'
 import { authService } from '@/services/authService'
@@ -96,7 +97,10 @@ export function useRefreshPermissions() {
         // For now, just show a success toast
         toast.success('Permissions refreshed')
       } catch (error) {
-        console.error('Failed to refresh permissions:', error)
+        logger.error('Failed to refresh permissions', {
+          category: 'technical',
+          error,
+        })
         toast.error('Failed to refresh permissions')
       }
     },

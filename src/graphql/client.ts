@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { REFRESH_TOKEN_MUTATION } from '@/graphql/mutations/auth.mutations';
 import { isPermissionError, OPERATION_NOT_PERMITTED_MESSAGE } from '@/lib/graphqlErrors';
+import { createCorrelationId, logger } from '@/lib/logger';
 
 const GRAPHQL_ENDPOINT = import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:8000/graphql';
 
@@ -27,6 +28,8 @@ export async function executeGraphQL<TData = any, TVariables = any>(
   document: string,
   variables?: TVariables
 ): Promise<TData> {
+  const correlationId = createCorrelationId();
+
   try {
     // Get token from Zustand store and inject into headers
     const token = useAuthStore.getState().accessToken;
@@ -35,6 +38,17 @@ export async function executeGraphQL<TData = any, TVariables = any>(
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+
+    headers['X-Correlation-ID'] = correlationId;
+
+    logger.info('GraphQL request', {
+      category: 'technical',
+      data: {
+        correlationId,
+        // Best-effort operation name detection without parsing the full document
+        operation: document.split(/\s+/).slice(0, 3).join(' '),
+      },
+    });
 
     // Execute request
     const data = await graphqlClient.request<TData>({
@@ -45,7 +59,13 @@ export async function executeGraphQL<TData = any, TVariables = any>(
 
     return data;
   } catch (error: any) {
-    console.error('GraphQL Error:', error);
+    logger.error('GraphQL request error', {
+      category: 'technical',
+      error,
+      data: {
+        correlationId,
+      },
+    });
 
     const isAuthError =
       error.response?.errors?.[0]?.extensions?.code === 'UNAUTHENTICATED' ||
@@ -88,6 +108,8 @@ export async function executeGraphQL<TData = any, TVariables = any>(
         if (newAccessToken) {
           retryHeaders.Authorization = `Bearer ${newAccessToken}`;
         }
+
+        retryHeaders['X-Correlation-ID'] = correlationId;
 
         const retryData = await graphqlClient.request<TData>({
           document,

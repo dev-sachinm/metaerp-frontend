@@ -6,6 +6,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios'
 import { API_BASE_URL, TOKEN_KEY, AUTH_MESSAGES } from '@/constants/api'
 import { OPERATION_NOT_PERMITTED_MESSAGE } from '@/lib/graphqlErrors'
 import { toast } from 'sonner'
+import { createCorrelationId, logger } from '@/lib/logger'
 
 // Create axios instance
 export const axiosInstance: AxiosInstance = axios.create({
@@ -15,16 +16,33 @@ export const axiosInstance: AxiosInstance = axios.create({
   },
 })
 
-// Request Interceptor - Add JWT token to headers
+// Request Interceptor - Add JWT token and correlation id to headers
 axiosInstance.interceptors.request.use(
   (config) => {
+    const correlationId = createCorrelationId()
+    if (!config.headers) config.headers = {}
+    config.headers['X-Correlation-ID'] = correlationId
+
     const token = localStorage.getItem(TOKEN_KEY)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    logger.info('HTTP request', {
+      category: 'technical',
+      data: {
+        method: (config.method || 'GET').toUpperCase(),
+        url: config.url,
+        correlationId,
+      },
+    })
     return config
   },
   (error) => {
+    logger.error('HTTP request setup failed', {
+      category: 'technical',
+      error,
+    })
     return Promise.reject(error)
   }
 )
@@ -53,6 +71,22 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config as typeof error.config & { _retry?: boolean }
     const status = error.response?.status
     const data = error.response?.data as Record<string, unknown> | undefined
+    const correlationId =
+      (originalRequest?.headers && (originalRequest.headers['X-Correlation-ID'] as string)) || undefined
+
+    if (status && status >= 400) {
+      logger.error('HTTP response error', {
+        category: 'technical',
+        error,
+        data: {
+          status,
+          url: originalRequest?.url,
+          method: originalRequest?.method,
+          correlationId,
+          response: data,
+        },
+      })
+    }
 
     // 401 - Unauthorized (token expired or invalid)
     if (status === 401 && !originalRequest._retry) {

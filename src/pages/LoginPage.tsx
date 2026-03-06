@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { getErrorMessage } from '@/lib/graphqlErrors'
 import { useLogin } from '@/hooks/graphql/useAuthMutation'
+import { logger } from '@/lib/logger'
 import { motion } from 'framer-motion'
 import { AlertCircle } from 'lucide-react'
 
@@ -67,10 +68,21 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     setFormError(null)
     try {
+      logger.info('Login form submitted', {
+        category: 'business',
+        data: { username: data.username.trim() },
+      })
       await loginMutation.mutateAsync({ username: data.username.trim(), password: data.password })
+      logger.info('User logged in successfully', {
+        category: 'business',
+      })
       navigate('/', { replace: true })
     } catch (err) {
       setFormError(getLoginErrorMessage(err))
+      logger.error('Login form submission failed', {
+        category: 'technical',
+        error: err,
+      })
     }
   }
 
