@@ -31,6 +31,7 @@ import { VendorsList } from './pages/master/VendorsList'
 import { useAuth } from '@/hooks/useAuthQueries'
 import { useIsInitialized, useAuthStore } from '@/stores/authStore'
 import { useEnabledModulesQuery } from '@/hooks/graphql/useModulesQuery'
+import { useLogContext } from '@/hooks/useLogContext'
 
 // Components
 import { Toaster } from 'sonner'
@@ -46,6 +47,7 @@ const queryClient = new QueryClient()
  * App Wrapper - Handles auth initialization
  */
 function AppContent() {
+  useLogContext()
   const { isLoading } = useAuth()
   const { setIsInitialized } = useAuthStore()
 

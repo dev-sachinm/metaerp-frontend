@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { logger } from '@/lib/logger'
 
 interface Props {
   children: ReactNode
@@ -32,8 +33,15 @@ export class FeatureErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const featureName = this.props.featureName || 'Feature'
-    console.error(`${featureName} Error:`, error, errorInfo)
-    
+    logger.error(`${featureName} Error`, {
+      category: 'technical',
+      error,
+      data: {
+        componentStack: errorInfo.componentStack,
+        featureName,
+      },
+    })
+
     // TODO: Send to error monitoring service
     // Example: Sentry.captureException(error, { tags: { feature: featureName } })
   }
