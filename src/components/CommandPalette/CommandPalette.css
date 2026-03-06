@@ -1,0 +1,253 @@
+/* Command Palette Styles */
+
+.command-palette {
+  position: fixed;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 640px;
+  max-height: 600px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 16px 70px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+}
+
+.command-palette[data-state='open'] {
+  animation: commandPaletteShow 150ms ease-out;
+}
+
+.command-palette[data-state='closed'] {
+  animation: commandPaletteHide 150ms ease-in;
+}
+
+@keyframes commandPaletteShow {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes commandPaletteHide {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.96);
+  }
+}
+
+.command-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.command-icon {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.command-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: #111827;
+  background: transparent;
+}
+
+.command-input::placeholder {
+  color: #9ca3af;
+}
+
+.command-list {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 400px;
+  flex: 1;
+}
+
+.command-group {
+  padding: 8px 0;
+}
+
+.command-group:not(:first-child) {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.command-group [cmdk-group-heading] {
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  color: #374151;
+}
+
+.command-item:hover,
+.command-item[aria-selected='true'] {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.command-item-icon {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.command-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.command-item-label {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-item-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.command-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.command-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background: #f9fafb;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.command-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .command-palette {
+    background: #1f2937;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .command-input-wrapper {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .command-input {
+    color: #f3f4f6;
+  }
+
+  .command-input::placeholder {
+    color: #6b7280;
+  }
+
+  .command-group:not(:first-child) {
+    border-top-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .command-item {
+    color: #d1d5db;
+  }
+
+  .command-item:hover,
+  .command-item[aria-selected='true'] {
+    background: #374151;
+    color: #f3f4f6;
+  }
+
+  .command-footer {
+    background: #111827;
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .command-kbd {
+    background: #374151;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #d1d5db;
+  }
+}
+
+/* Overlay backdrop */
+[cmdk-overlay] {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  animation: overlayShow 150ms ease-out;
+}
+
+@keyframes overlayShow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

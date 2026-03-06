@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  /* Custom utility classes */
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* CSS Variables for consistent theming */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  
+  --secondary: 199 89% 48%;
+  --secondary-foreground: 0 0% 100%;
+  
+  --accent: 258 90% 66%;
+  --accent-foreground: 0 0% 100%;
+  
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 243 75% 59%;
+  
+  --success: 160 84% 39%;
+  --warning: 38 92% 50%;
+  --destructive: 0 84% 60%;
+  
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  
+  --secondary: 199 89% 48%;
+  --secondary-foreground: 0 0% 100%;
+  
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 243 75% 59%;
+}
+
+/* Loader cube animation (no inline styles) */
+@keyframes cube-rotate {
+  0% { transform: rotateX(0deg) rotateY(0deg); }
+  100% { transform: rotateX(360deg) rotateY(360deg); }
+}
+.loader-cube-container {
+  animation: cube-rotate 4s linear infinite;
+  transform-style: preserve-3d;
+  width: 40px;
+  height: 40px;
+  position: relative;
+}
+.loader-cube-face {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: 1px solid #4f46e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  color: white;
+  opacity: 0.9;
+}
+.loader-cube-front { transform: translateZ(20px); }
+.loader-cube-back { transform: translateZ(-20px) rotateY(180deg); }
+.loader-cube-right { transform: rotateY(90deg) translateZ(20px); }
+.loader-cube-left { transform: rotateY(-90deg) translateZ(20px); }
+.loader-cube-top { transform: rotateX(90deg) translateZ(20px); }
+.loader-cube-bottom { transform: rotateX(-90deg) translateZ(20px); }

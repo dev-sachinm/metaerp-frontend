@@ -1,0 +1,248 @@
+/**
+ * User Query Hooks - React Query hooks for user operations
+ * Implements hybrid pagination strategy with automatic batch fetching
+ */
+
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
+import { executeGraphQL } from '@/graphql/client';
+import { GET_USERS, GET_USER, GET_CURRENT_USER } from '@/graphql/queries/users.queries';
+import {
+  CREATE_USER_MUTATION,
+  UPDATE_USER_MUTATION,
+  DELETE_USER_MUTATION,
+  CHANGE_PASSWORD_MUTATION,
+  SET_USER_PASSWORD_MUTATION,
+} from '@/graphql/mutations/users.mutations';
+import { useAuthStore } from '@/stores/authStore';
+
+// Type definitions (aligned with BACKEND_IMPLEMENTATION_STATE.md UserType)
+export interface User {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string | null;
+  mobileNumber?: string | null;
+  username?: string;
+  email: string;
+  isActive: boolean;
+  roles: string[];
+}
+
+export interface PaginatedUsers {
+  users: {
+    items: User[];
+    total: number;
+    skip: number;
+    limit: number;
+    page: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+export interface GetUsersVariables {
+  skip: number;
+  limit: number;
+}
+
+/**
+ * Query keys factory - centralized key management
+ * Enables efficient cache invalidation and updates
+ */
+export const userKeys = {
+  all: ['users'] as const,
+  lists: () => [...userKeys.all, 'list'] as const,
+  list: (params?: GetUsersVariables) => [...userKeys.lists(), params] as const,
+  details: () => [...userKeys.all, 'detail'] as const,
+  detail: (id: string) => [...userKeys.details(), id] as const,
+  current: () => [...userKeys.all, 'current'] as const,
+};
+
+/**
+ * Standard paginated users query
+ * Use for simple pagination scenarios
+ * 
+ * @param skip - Number of records to skip
+ * @param limit - Number of records to fetch
+ */
+export function useUsers(skip: number = 0, limit: number = 50) {
+  return useQuery({
+    queryKey: userKeys.list({ skip, limit }),
+    queryFn: () => executeGraphQL<PaginatedUsers>(GET_USERS, { skip, limit }),
+    staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000, // 5 minutes
+    gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+/**
+ * Infinite query for hybrid pagination
+ * Fetches data in batches (default 1000 rows) and auto-loads next batch
+ * Perfect for large datasets with client-side pagination
+ * 
+ * @param pageSize - Batch size per request (default from env or 1000)
+ */
+export function useInfiniteUsers(pageSize?: number) {
+  const batchSize = pageSize || Number(import.meta.env.VITE_GRAPHQL_BATCH_SIZE) || 1000;
+  
+  return useInfiniteQuery({
+    queryKey: userKeys.lists(),
+    queryFn: ({ pageParam = 0 }) =>
+      executeGraphQL<PaginatedUsers>(GET_USERS, {
+        skip: pageParam,
+        limit: batchSize,
+      }),
+    getNextPageParam: (lastPage) => {
+      const { hasMore, skip, limit } = lastPage.users;
+      return hasMore ? skip + limit : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000,
+    gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000,
+  });
+}
+
+/**
+ * Get single user by ID
+ * 
+ * @param id - User ID
+ * @param options - Additional query options
+ */
+export function useUser(id: string, options?: Partial<UseQueryOptions<{ user: User }>>) {
+  return useQuery<{ user: User }>({
+    queryKey: userKeys.detail(id),
+    queryFn: () => executeGraphQL<{ user: User }>(GET_USER, { userId: id }),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
+/**
+ * Get current authenticated user
+ * Useful for profile display, permission checks
+ */
+export function useCurrentUser() {
+  const token = useAuthStore((state) => state.accessToken);
+  
+  return useQuery({
+    queryKey: [...userKeys.current(), token], // Include token in key so query re-runs when token changes
+    queryFn: () => executeGraphQL<{ currentUser: User }>(GET_CURRENT_USER),
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    enabled: !!token, // Only fetch if we have a token
+  });
+}
+
+/** createUser variables; dateOfBirth, mobileNumber, email are optional. */
+export interface CreateUserVariables {
+  firstName: string;
+  lastName: string;
+  username: string;
+  password: string;
+  dateOfBirth?: string | null;
+  mobileNumber?: string | null;
+  email?: string | null;
+}
+
+/**
+ * Create user mutation (createUser). Backend: required firstName, lastName, username, password;
+ * optional dateOfBirth (Date), mobileNumber (String), email (String). Only send optional args when provided.
+ * Invalidates user list cache on success.
+ */
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: CreateUserVariables) => {
+      const dateOfBirth = variables.dateOfBirth?.trim();
+      const mobileNumber = variables.mobileNumber?.trim();
+      const email = variables.email?.trim();
+      return executeGraphQL<{ createUser: User }>(CREATE_USER_MUTATION, {
+        firstName: variables.firstName.trim(),
+        lastName: variables.lastName.trim(),
+        username: variables.username.trim(),
+        password: variables.password,
+        ...(dateOfBirth ? { dateOfBirth } : {}),
+        ...(mobileNumber ? { mobileNumber } : {}),
+        ...(email ? { email } : {}),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+    },
+  });
+}
+
+/** updateUser variables; all except userId are optional. Username and password cannot be changed. */
+export interface UpdateUserVariables {
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  dateOfBirth?: string | null;
+  mobileNumber?: string | null;
+  email?: string | null;
+  isActive?: boolean | null;
+}
+
+/**
+ * Update user mutation (updateUser). Requires update permission on user entity.
+ * Invalidates user list and detail cache on success.
+ */
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: UpdateUserVariables) => {
+      const payload: Record<string, unknown> = { userId: variables.userId };
+      if (variables.firstName !== undefined) payload.firstName = variables.firstName?.trim() ?? null;
+      if (variables.lastName !== undefined) payload.lastName = variables.lastName?.trim() ?? null;
+      if (variables.dateOfBirth !== undefined) payload.dateOfBirth = variables.dateOfBirth?.trim() || null;
+      if (variables.mobileNumber !== undefined) payload.mobileNumber = variables.mobileNumber?.trim() || null;
+      if (variables.email !== undefined) payload.email = variables.email?.trim() || null;
+      if (variables.isActive !== undefined) payload.isActive = variables.isActive;
+      return executeGraphQL<{ updateUser: User }>(UPDATE_USER_MUTATION, payload);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(variables.userId) });
+    },
+  });
+}
+
+/**
+ * Delete user mutation (deleteUser). Requires delete permission on user entity.
+ * Invalidates user list cache on success.
+ */
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      executeGraphQL<{ deleteUser: boolean }>(DELETE_USER_MUTATION, { userId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+    },
+  });
+}
+
+/**
+ * Change current user's password. Requires authentication.
+ * currentPassword + newPassword (min 6 chars).
+ */
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (variables: { currentPassword: string; newPassword: string }) =>
+      executeGraphQL<{ changePassword: boolean }>(CHANGE_PASSWORD_MUTATION, variables),
+  });
+}
+
+/**
+ * Set another user's password (admin). Requires update permission on user entity.
+ * newPassword min 6 characters.
+ */
+export function useSetUserPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: { userId: string; newPassword: string }) =>
+      executeGraphQL<{ setUserPassword: boolean }>(SET_USER_PASSWORD_MUTATION, variables),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(variables.userId) });
+    },
+  });
+}
