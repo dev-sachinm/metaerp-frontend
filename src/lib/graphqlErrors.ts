@@ -9,7 +9,7 @@ const PERMISSION_MESSAGE_PATTERNS = [
   /not enough permissions/i,
   /permission denied/i,
   /do not have permission/i,
-  /forbidden/i,
+  /access denied/i,
 ]
 
 /** User-facing message shown when an operation is not permitted */

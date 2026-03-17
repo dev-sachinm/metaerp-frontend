@@ -55,12 +55,19 @@ export function mergeByRoleToEntities(byRole: PermissionsByRole | null | undefin
           };
         }
       }
+      const list =
+        (existing?.list ?? false) ||
+        // If backend sends an explicit list flag in future, OR it in:
+        // !!(perms as any).list ||
+        // Treat read as allowing list when list is not present.
+        read;
+
       entities[entityName] = {
         create,
         read,
         update,
         delete: delete_,
-        list: true,
+        list,
         fields,
       };
     }

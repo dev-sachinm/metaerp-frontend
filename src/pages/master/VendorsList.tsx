@@ -33,6 +33,7 @@ export function VendorsList() {
     const cols: { header: string; cell: (r: Vendor) => ReactNode }[] = []
     if (canShowColumn(readableFields, 'code')) cols.push({ header: 'Code', cell: (r: Vendor) => <span className="font-medium">{r.code}</span> })
     if (canShowColumn(readableFields, 'name')) cols.push({ header: 'Name', cell: (r: Vendor) => r.name })
+    if (canShowColumn(readableFields, 'contactPerson')) cols.push({ header: 'Contact Person', cell: (r: Vendor) => r.contactPerson ?? '—' })
     if (canShowColumn(readableFields, 'email')) cols.push({ header: 'Email', cell: (r: Vendor) => r.email ?? '—' })
     if (canShowColumn(readableFields, 'phone')) cols.push({ header: 'Phone', cell: (r: Vendor) => r.phone ?? '—' })
     if (canShowColumn(readableFields, 'address')) cols.push({ header: 'Address', cell: (r: Vendor) => r.address ?? '—' })
@@ -44,6 +45,12 @@ export function VendorsList() {
         ),
       })
     }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: Vendor) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: Vendor) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
+    }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: Vendor) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
     }
@@ -52,6 +59,9 @@ export function VendorsList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: Vendor) =>
+    `${r.code ?? ''} ${r.name ?? ''} ${r.contactPerson ?? ''} ${r.email ?? ''} ${r.phone ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<Vendor>
@@ -63,6 +73,9 @@ export function VendorsList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code, name, or contact…"
+      getSearchText={getSearchText}
       getEditHref={(r) => `/master/vendors/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteVendor.isPending}

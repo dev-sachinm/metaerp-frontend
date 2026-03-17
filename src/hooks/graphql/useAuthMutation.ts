@@ -11,6 +11,7 @@ import { mergeByRoleToEntities, getRoleNamesFromByRole } from '@/lib/permissions
 import type { PermissionsByRole } from '@/lib/permissions';
 import { getErrorMessage } from '@/lib/graphqlErrors';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 // Type definitions
 interface LoginVariables {
@@ -85,9 +86,17 @@ export function useLogin() {
       // Check for backend database errors
       if (rawMessage.includes('UniqueViolation') || rawMessage.includes('duplicate key')) {
         toast.error('Server error: Database issue. Please try again or contact support.');
-        console.error('Backend database error:', rawMessage);
+        logger.error('Backend database error during login', {
+          category: 'technical',
+          data: { rawMessage },
+          error,
+        });
       } else {
         toast.error(getErrorMessage(error, 'Login failed'));
+        logger.error('Login mutation failed', {
+          category: 'technical',
+          error,
+        });
       }
     },
   });

@@ -1,89 +1,60 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { DashboardLayout } from '@/layouts/DashboardLayout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
+import { Form } from '@/components/ui/form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { ArrowLeft, AlertCircle, Building2 } from 'lucide-react'
-import { FieldGuard } from '@/components/FieldGuard'
 import { getErrorMessage } from '@/lib/graphqlErrors'
-import { useCreateCustomer } from '@/hooks/graphql/useMasterDataMutations'
+import { logger } from '@/lib/logger'
+import { useCreateCustomer, type CustomerInput } from '@/hooks/graphql/useMasterDataMutations'
+import {
+  getEntityConfig,
+  useEntityFormFields,
+  EntityFormFields,
+  buildFormSchema,
+  buildDefaultValues,
+} from '@/registry'
 
-const CUSTOMER_ENTITY = 'customer'
-
-const customerSchema = z.object({
-  code: z.string().min(1, 'Please enter a customer code'),
-  name: z.string().min(1, 'Please enter a customer name'),
-  address: z.string().optional(),
-  contactInfo: z.string().optional(),
-  primaryContactName: z.string().optional(),
-  primaryContactEmail: z.string().optional(),
-  primaryContactMobile: z.string().optional(),
-  secondaryContactName: z.string().optional(),
-  secondaryContactEmail: z.string().optional(),
-  secondaryContactMobile: z.string().optional(),
-  isActive: z.boolean().optional().default(true),
-})
-
-type CustomerFormData = z.infer<typeof customerSchema>
+const ENTITY = 'customer'
 
 export function CreateCustomer() {
   const navigate = useNavigate()
   const createCustomer = useCreateCustomer()
   const [formError, setFormError] = useState<string | null>(null)
+  const formFields = useEntityFormFields(ENTITY, 'create')
+  const schema = useMemo(() => buildFormSchema(formFields), [formFields])
+  const defaultValues = useMemo(() => buildDefaultValues(formFields), [formFields])
+  const config = getEntityConfig(ENTITY)
 
-  const form = useForm<CustomerFormData>({
-    resolver: zodResolver(customerSchema),
+  const form = useForm({
+    resolver: zodResolver(schema),
     mode: 'onBlur',
-    defaultValues: {
-      code: '',
-      name: '',
-      address: '',
-      contactInfo: '',
-      primaryContactName: '',
-      primaryContactEmail: '',
-      primaryContactMobile: '',
-      secondaryContactName: '',
-      secondaryContactEmail: '',
-      secondaryContactMobile: '',
-      isActive: true,
-    },
+    defaultValues,
   })
 
-  const onSubmit = async (data: CustomerFormData) => {
+  const onSubmit = async (data: Record<string, unknown>) => {
     setFormError(null)
     try {
-      await createCustomer.mutateAsync({
-        code: data.code.trim(),
-        name: data.name.trim(),
-        address: data.address?.trim() || undefined,
-        contactInfo: data.contactInfo?.trim() || undefined,
-        primaryContactName: data.primaryContactName?.trim() || undefined,
-        primaryContactEmail: data.primaryContactEmail?.trim() || undefined,
-        primaryContactMobile: data.primaryContactMobile?.trim() || undefined,
-        secondaryContactName: data.secondaryContactName?.trim() || undefined,
-        secondaryContactEmail: data.secondaryContactEmail?.trim() || undefined,
-        secondaryContactMobile: data.secondaryContactMobile?.trim() || undefined,
-        isActive: data.isActive ?? true,
-      })
-      toast.success('Customer created')
+      const input: Record<string, unknown> = {}
+      for (const f of formFields) {
+        if (f.readOnlyInForm) continue
+        const v = data[f.key]
+        if (f.type === 'boolean') {
+          input[f.key] = Boolean(v)
+        } else if (v !== undefined && v !== null && v !== '') {
+          input[f.key] = typeof v === 'string' ? String(v).trim() : v
+        }
+      }
+      await createCustomer.mutateAsync(input as unknown as CustomerInput)
+      logger.info('Customer created', { category: 'business', data: { entity: 'customer', code: input.code } })
       navigate('/master/customers', { replace: true })
     } catch (err: unknown) {
+      logger.error('Create customer failed', { category: 'technical', error: err })
       setFormError(getErrorMessage(err, 'Failed to create customer'))
     }
   }
@@ -116,7 +87,7 @@ export function CreateCustomer() {
                 </div>
                 <div>
                   <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
-                    Create Customer
+                    {config?.createTitle ?? 'Create Customer'}
                   </CardTitle>
                   <CardDescription className="mt-1 text-sm text-slate-600">
                     Add a new customer to Master Data.
@@ -141,126 +112,7 @@ export function CreateCustomer() {
                     </motion.div>
                   )}
 
-                  <section className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="code" action="write">
-                        <FormField
-                          control={form.control}
-                          name="code"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Code</FormLabel>
-                              <FormControl>
-                                <Input placeholder="CUST-001" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </FieldGuard>
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="name" action="write">
-                        <FormField
-                          control={form.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Name</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Acme Corp" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </FieldGuard>
-                    </div>
-                    <FieldGuard entity={CUSTOMER_ENTITY} fieldName="address" action="write">
-                      <FormField
-                        control={form.control}
-                        name="address"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Address</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Address (optional)" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </FieldGuard>
-                    <FieldGuard entity={CUSTOMER_ENTITY} fieldName="contactInfo" action="write">
-                      <FormField
-                        control={form.control}
-                        name="contactInfo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Contact info</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Contact person / phone / email (optional)" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </FieldGuard>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="primaryContactName" action="write">
-                        <FormField control={form.control} name="primaryContactName" render={({ field }) => (
-                          <FormItem><FormLabel>Primary contact name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="primaryContactEmail" action="write">
-                        <FormField control={form.control} name="primaryContactEmail" render={({ field }) => (
-                          <FormItem><FormLabel>Primary contact email</FormLabel><FormControl><Input type="email" placeholder="Email" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="primaryContactMobile" action="write">
-                        <FormField control={form.control} name="primaryContactMobile" render={({ field }) => (
-                          <FormItem><FormLabel>Primary contact mobile</FormLabel><FormControl><Input type="tel" placeholder="Mobile" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="secondaryContactName" action="write">
-                        <FormField control={form.control} name="secondaryContactName" render={({ field }) => (
-                          <FormItem><FormLabel>Secondary contact name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="secondaryContactEmail" action="write">
-                        <FormField control={form.control} name="secondaryContactEmail" render={({ field }) => (
-                          <FormItem><FormLabel>Secondary contact email</FormLabel><FormControl><Input type="email" placeholder="Email" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                      <FieldGuard entity={CUSTOMER_ENTITY} fieldName="secondaryContactMobile" action="write">
-                        <FormField control={form.control} name="secondaryContactMobile" render={({ field }) => (
-                          <FormItem><FormLabel>Secondary contact mobile</FormLabel><FormControl><Input type="tel" placeholder="Mobile" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </FieldGuard>
-                    </div>
-                    <FieldGuard entity={CUSTOMER_ENTITY} fieldName="isActive" action="write">
-                      <FormField
-                        control={form.control}
-                        name="isActive"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                            <div>
-                              <FormLabel>Active</FormLabel>
-                              <p className="text-xs text-slate-500">
-                                Inactive customers are hidden from most selections.
-                              </p>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={(v) => field.onChange(v)}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </FieldGuard>
-                  </section>
+                  <EntityFormFields entity={ENTITY} mode="create" control={form.control} />
 
                   <div className="flex items-center justify-end gap-3">
                     <Button
@@ -275,11 +127,21 @@ export function CreateCustomer() {
                       disabled={createCustomer.isPending}
                       className="bg-indigo-600 hover:bg-indigo-700"
                     >
-                      {createCustomer.isPending ? 'Creating…' : 'Create Customer'}
+                      {createCustomer.isPending ? 'Creating…' : (config?.createTitle ?? 'Create Customer')}
                     </Button>
                   </div>
                 </form>
               </Form>
+
+              <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
+                <p className="text-xs font-semibold text-foreground mb-2">Demo credentials (username / password)</p>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p><span className="font-medium text-foreground">Superadmin:</span> superadmin / superadmin123</p>
+                  <p><span className="font-medium text-foreground">Admin:</span> admin / admin123</p>
+                  <p><span className="font-medium text-foreground">Manager:</span> manager / manager123</p>
+                  <p><span className="font-medium text-foreground">Employee:</span> employee / employee123</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -287,4 +149,3 @@ export function CreateCustomer() {
     </DashboardLayout>
   )
 }
-

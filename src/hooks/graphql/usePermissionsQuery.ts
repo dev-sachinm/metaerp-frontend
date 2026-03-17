@@ -59,7 +59,7 @@ export function useMyPermissions() {
       const result = await executeGraphQL<{ myPermissions: MyPermissions }>(GET_MY_PERMISSIONS);
       return result;
     },
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 2 * 60 * 1000, // 2 minutes — so new role/field permissions appear after refetch or window focus
     gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
     enabled: !!token, // Only fetch if we have a token
   });

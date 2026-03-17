@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
-import { useCurrentUser } from '@/stores/authStore'
-import { useLogout } from '@/hooks/useAuthQueries'
-import { useAccessibleEntities } from '@/hooks/usePermissions'
+import { useCurrentUser, usePermissions } from '@/stores/authStore'
+import { useLogout, useRefreshPermissions } from '@/hooks/useAuthQueries'
 import { useEnabledModuleIds } from '@/stores/modulesStore'
 import { NAV_ITEMS, type NavItemConfig } from '@/config/navigation'
+import { resolvePermissionEntityKey } from '@/lib/permissionEntityKey'
 
 interface NavItemProps {
   to: string
@@ -86,6 +86,11 @@ const NAV_ICONS: Record<NavItemConfig['icon'] | undefined, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
     </svg>
   ),
+  project: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2zm2 8h8m-8 4h5" />
+    </svg>
+  ),
 }
 
 interface SidebarProps {
@@ -103,17 +108,33 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
   const user = useCurrentUser()
   const navigate = useNavigate()
   const logoutMutation = useLogout()
+  const refreshPermissions = useRefreshPermissions()
   const enabledModuleIds = useEnabledModuleIds()
-  const accessibleEntities = useAccessibleEntities()
+  const permissions = usePermissions()
+  const isDev = import.meta.env.DEV
 
-  // Show menu item only if: (1) its module is enabled, (2) if it has an entity, user has access to that entity
+  // Show menu item only if: (1) its module is enabled, (2) if it has an entity,
+  // the user has any permission on that entity. Uses smart key resolution so
+  // 'user'/'users', 'project'/'projects' etc. all match regardless of backend convention.
   const visibleNavItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if (!enabledModuleIds.includes(item.moduleId)) return false
-      if (item.entity != null) return accessibleEntities.includes(item.entity)
+      if (item.entity != null) {
+        if (!permissions?.entities) return false
+        const key = resolvePermissionEntityKey(item.entity, permissions.entities)
+        const entityPerms = permissions.entities[key]
+        if (!entityPerms) return false
+        return (
+          entityPerms.create === true ||
+          entityPerms.read === true ||
+          entityPerms.update === true ||
+          entityPerms.delete === true ||
+          entityPerms.list === true
+        )
+      }
       return true
     })
-  }, [enabledModuleIds, accessibleEntities])
+  }, [enabledModuleIds, permissions])
 
   const handleLogout = () => {
     logoutMutation.mutate()
@@ -240,6 +261,29 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           </div>
         )}
 
+        {/* Refresh permissions - pick up newly enabled fields/entities without re-login */}
+        <button
+          type="button"
+          onClick={() => refreshPermissions.mutate()}
+          disabled={refreshPermissions.isPending}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 mb-2 ${
+            refreshPermissions.isPending
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          } ${isCollapsed ? 'justify-center' : ''}`}
+          title="Reload permissions (e.g. after an admin enabled new fields for your role)"
+        >
+          <svg
+            className={`w-5 h-5 flex-shrink-0 ${refreshPermissions.isPending ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {!isCollapsed && <span>{refreshPermissions.isPending ? 'Refreshing…' : 'Refresh permissions'}</span>}
+        </button>
+
         {/* Logout Button */}
         <button
           onClick={handleLogout}
@@ -266,6 +310,40 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           {!isCollapsed && <span>{logoutMutation.isPending ? 'Logging out...' : 'Logout'}</span>}
         </button>
       </div>
+
+      {/* DEV-ONLY: Permission debug panel — remove before production */}
+      {isDev && !isCollapsed && (
+        <div className="mx-2 mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] leading-4 text-amber-900 overflow-auto max-h-56">
+          <p className="font-bold mb-1">🔍 Debug (dev only)</p>
+
+          <p className="font-semibold">Modules (global):</p>
+          <p className="break-all">{enabledModuleIds.length ? enabledModuleIds.join(', ') : '(none loaded)'}</p>
+          <p>{enabledModuleIds.includes('project_management') ? '✅ project_management ON' : '❌ project_management OFF'}</p>
+
+          <p className="font-semibold mt-1">Entity keys in myPermissions:</p>
+          <p className="break-all">
+            {permissions?.entities
+              ? Object.keys(permissions.entities).join(', ') || '(empty object)'
+              : '⚠️ null — permissions not loaded'}
+          </p>
+
+          <p className="font-semibold mt-1">"project" lookup:</p>
+          <p>
+            {permissions?.entities
+              ? (() => {
+                  const key = resolvePermissionEntityKey('project', permissions.entities)
+                  const p = permissions.entities[key]
+                  return p
+                    ? `✅ matched key="${key}" r=${p.read} c=${p.create} u=${p.update} d=${p.delete}`
+                    : `❌ no match for "project" in [${Object.keys(permissions.entities).join(', ')}]`
+                })()
+              : '(permissions null)'}
+          </p>
+
+          <p className="font-semibold mt-1">visibleNavItems:</p>
+          <p className="break-all">{visibleNavItems.map(i => i.label).join(', ') || '(none)'}</p>
+        </div>
+      )}
 
       {/* Animated gradient accent */}
       <div className="absolute top-0 right-0 w-0.5 h-full bg-gradient-to-b from-indigo-600 via-blue-600 to-indigo-600 opacity-50" />

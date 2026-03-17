@@ -42,6 +42,12 @@ export function TaxList() {
         ),
       })
     }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: Tax) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: Tax) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
+    }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: Tax) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
     }
@@ -50,6 +56,9 @@ export function TaxList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: Tax) =>
+    `${r.code ?? ''} ${r.name ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<Tax>
@@ -61,6 +70,9 @@ export function TaxList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code or name…"
+      getSearchText={getSearchText}
       getEditHref={(r) => `/master/tax/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteTax.isPending}

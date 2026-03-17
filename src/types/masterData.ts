@@ -7,7 +7,12 @@ export interface ProductCategory {
   id: string
   categoryName: string
   parentId: string | null
+  parentName?: string | null
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -25,6 +30,10 @@ export interface Customer {
   secondaryContactEmail: string | null
   secondaryContactMobile: string | null
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -34,6 +43,10 @@ export interface UOM {
   code: string
   name: string
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -44,6 +57,10 @@ export interface Tax {
   code: string
   ratePercent: number
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -54,6 +71,10 @@ export interface PaymentTerm {
   code: string
   days: number
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -61,8 +82,14 @@ export interface PaymentTerm {
 export interface ExpenseCategory {
   id: string
   name: string
+  parentId?: string | null
+  parentName?: string | null
   code: string
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -71,11 +98,15 @@ export interface Supplier {
   id: string
   name: string
   code: string
-  contactInfo: string | null
+  contactPerson: string | null
   email: string | null
   phone: string | null
   address: string | null
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -84,11 +115,15 @@ export interface Vendor {
   id: string
   name: string
   code: string
-  contactInfo: string | null
+  contactPerson: string | null
   email: string | null
   phone: string | null
   address: string | null
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }
@@ -101,8 +136,13 @@ export interface Product {
   description: string | null
   make: string | null
   unitId: string | null
-  initialStock: number | null
+  unitName?: string | null
+  quantity: number | null
   isActive: boolean
+  createdBy?: string | null
+  createdByUsername?: string | null
+  modifiedBy?: string | null
+  modifiedByUsername?: string | null
   createdAt?: string
   modifiedAt?: string
 }

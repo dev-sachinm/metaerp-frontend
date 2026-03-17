@@ -33,6 +33,9 @@ export function ExpenseCategoriesList() {
     const cols: { header: string; cell: (r: ExpenseCategory) => ReactNode }[] = []
     if (canShowColumn(readableFields, 'code')) cols.push({ header: 'Code', cell: (r: ExpenseCategory) => <span className="font-medium">{r.code}</span> })
     if (canShowColumn(readableFields, 'name')) cols.push({ header: 'Name', cell: (r: ExpenseCategory) => r.name })
+    if (canShowColumn(readableFields, 'parentName') || canShowColumn(readableFields, 'parentId')) {
+      cols.push({ header: 'Parent', cell: (r: ExpenseCategory) => r.parentName ?? r.parentId ?? '—' })
+    }
     if (canShowColumn(readableFields, 'isActive')) {
       cols.push({
         header: 'Status',
@@ -40,6 +43,12 @@ export function ExpenseCategoriesList() {
           <Badge variant={r.isActive ? 'default' : 'secondary'}>{r.isActive ? 'Active' : 'Inactive'}</Badge>
         ),
       })
+    }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: ExpenseCategory) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: ExpenseCategory) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
     }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: ExpenseCategory) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
@@ -49,6 +58,9 @@ export function ExpenseCategoriesList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: ExpenseCategory) =>
+    `${r.code ?? ''} ${r.name ?? ''} ${r.parentName ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<ExpenseCategory>
@@ -60,6 +72,9 @@ export function ExpenseCategoriesList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code, name, or parent…"
+      getSearchText={getSearchText}
       getEditHref={(r) => `/master/expense-categories/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteEc.isPending}

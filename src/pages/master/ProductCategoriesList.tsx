@@ -34,8 +34,8 @@ export function ProductCategoriesList() {
     if (canShowColumn(readableFields, 'categoryName')) {
       cols.push({ header: 'Name', cell: (r: ProductCategory) => <span className="font-medium">{r.categoryName}</span> })
     }
-    if (canShowColumn(readableFields, 'parentId')) {
-      cols.push({ header: 'Parent ID', cell: (r: ProductCategory) => r.parentId ?? '—' })
+    if (canShowColumn(readableFields, 'parentName') || canShowColumn(readableFields, 'parentId')) {
+      cols.push({ header: 'Parent', cell: (r: ProductCategory) => r.parentName ?? '—' })
     }
     if (canShowColumn(readableFields, 'isActive')) {
       cols.push({
@@ -44,6 +44,12 @@ export function ProductCategoriesList() {
           <Badge variant={r.isActive ? 'default' : 'secondary'}>{r.isActive ? 'Active' : 'Inactive'}</Badge>
         ),
       })
+    }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: ProductCategory) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: ProductCategory) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
     }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({
@@ -60,6 +66,9 @@ export function ProductCategoriesList() {
     return cols
   }, [readableFields])
 
+  const getSearchText = (r: ProductCategory) =>
+    `${r.categoryName ?? ''} ${r.parentName ?? ''} ${r.parentId ?? ''}`.toLowerCase()
+
   return (
     <MasterDataListPage<ProductCategory>
       title="Product Categories"
@@ -70,6 +79,9 @@ export function ProductCategoriesList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by name or parent…"
+      getSearchText={getSearchText}
       getEditHref={(r) => '/master/product-categories/' + r.id + '/edit'}
       onDelete={handleDelete}
       deletePending={deleteCat.isPending}

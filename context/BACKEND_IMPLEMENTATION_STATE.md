@@ -473,24 +473,45 @@ All operations exposed by the schema:
 
 | Query | Arguments | Returns | Description |
 |-------|-----------|---------|-------------|
-| `productCategories` | `skip: Int = 0`, `limit: Int = 500`, `activeOnly: Boolean = true` | `ProductCategoryListType!` | Paginated product categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
-| `productCategory` | `id: String!` | `ProductCategoryType` | Single product category by id. `null` if not found. |
-| `customers` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `CustomerListType!` | Paginated customers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `productCategories` | `skip: Int = 0`, `limit: Int = 500`, `isActive: Boolean` (optional) | `ProductCategoryListType!` | Paginated product categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Item fields include `parentId` and `parentName`. |
+| `productCategory` | `id: String!` | `ProductCategoryType` | Single product category by id. Includes `parentId` and `parentName`. `null` if not found. |
+| `customers` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `CustomerListType!` | Paginated customers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `customer` | `id: String!` | `CustomerType` | Single customer by id. `null` if not found. |
-| `uomList` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `UOMListType!` | Paginated UOMs (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `uomList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `UOMListType!` | Paginated UOMs (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `uom` | `id: String!` | `UOMType` | Single UOM by id. `null` if not found. |
-| `taxList` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `TaxListType!` | Paginated taxes (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `taxList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `TaxListType!` | Paginated taxes (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `tax` | `id: String!` | `TaxType` | Single tax by id. `null` if not found. |
-| `paymentTermsList` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `PaymentTermListType!` | Paginated payment terms (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `paymentTermsList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `PaymentTermListType!` | Paginated payment terms (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `paymentTerm` | `id: String!` | `PaymentTermType` | Single payment term by id. `null` if not found. |
-| `expenseCategoriesList` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `ExpenseCategoryListType!` | Paginated expense categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
-| `expenseCategory` | `id: String!` | `ExpenseCategoryType` | Single expense category by id. `null` if not found. |
-| `suppliers` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `SupplierListType!` | Paginated suppliers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `expenseCategoriesList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `ExpenseCategoryListType!` | Paginated expense categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Item fields include `parentId` and `parentName`. |
+| `expenseCategory` | `id: String!` | `ExpenseCategoryType` | Single expense category by id. Includes `parentId` and `parentName`. `null` if not found. |
+| `suppliers` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `SupplierListType!` | Paginated suppliers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `supplier` | `id: String!` | `SupplierType` | Single supplier by id. `null` if not found. |
-| `vendors` | `skip: Int = 0`, `limit: Int = 100`, `activeOnly: Boolean = true` | `VendorListType!` | Paginated vendors (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `vendors` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `VendorListType!` | Paginated vendors (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `vendor` | `id: String!` | `VendorType` | Single vendor by id. `null` if not found. |
-| `products` | `skip: Int = 0`, `limit: Int = 100`, `categoryId: String`, `activeOnly: Boolean = true` | `ProductListType!` | Paginated products (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Optional filter by `categoryId`. |
-| `product` | `id: String!` | `ProductType` | Single product by id. `null` if not found. |
+| `products` | `skip: Int = 0`, `limit: Int = 100`, `categoryId: String`, `isActive: Boolean` (optional) | `ProductListType!` | Paginated products (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Optional filter by `categoryId`. |
+
+`isActive` behavior for all Master Data list queries:
+- `isActive: true` → only active records
+- `isActive: false` → only inactive records
+- omit `isActive` (or pass `null`) → both active and inactive records
+
+**Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
+
+| Query | Arguments | Returns | Description |
+|-------|-----------|---------|-------------|
+| `projects` | `skip: Int = 0`, `limit: Int = 100`, `status: String`, `customerId: String`, `isActive: Boolean` | `ProjectListType!` | Paginated projects (`items`, `total`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). **Scoped by assignment:** `superadmin` sees all projects; all other users see only projects they are assigned to directly or via their role. |
+| `project` | `id: String!` | `ProjectType` | Single project by id. Fields: `id`, `projectNumber`, `name`, `customerId`, `customerName`, `description`, `status`, `startDate`, `targetDate`, `actualDeliveryDate`, `budget`, `purchaseBudget`, `designerTargetDate`, `procurementTargetDate`, `manufacturingTargetDate`, `qualityTargetDate`, `assemblyTargetDate`, `isActive`, `remainingDays`, audit fields. `null` if not found. |
+| `projectAssignments` | `projectId: String!` | `[ProjectAssignmentType!]!` | List assignments for a project. Requires `read` permission on `project_assignment`. |
+| `projectAssignmentBoard` | `projectId: String!` | `ProjectAssignmentBoardType` | Assignment screen payload (project, assignments, assignable users/roles, canAssign). Requires `update` permission on `project_assignment`. |
+| `fixtures` | `projectId: String`, `status: String`, `isActive: Boolean`, `skip: Int = 0`, `limit: Int = 100` | `FixtureListType!` | Paginated fixtures (`items`, `total`, `skip`, `limit`). Item fields: `id`, `projectId`, `fixtureNumber`, `fixtureSeq`, `description`, `status`, `s3BomKey`, `bomFilename`, `bomUploadedAt`, `bomUploadedBy`, `isActive`, audit fields. |
+| `fixture` | `id: String!` | `FixtureType` | Single fixture by id. Same fields as list item. `null` if not found. |
+| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartPartNoContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. If any search arguments are provided, filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part partNo/name/make. `null` if fixture not found. |
+| `getDesignUploadUrl` | `fixtureId: String!`, `filename: String!` | `DesignUploadUrlType` | Get a presigned S3 upload URL for a BOM file (`.xlsx` or `.zip`). Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the file bytes to `uploadUrl` before calling `parseBomFile`. |
+| `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level (legacy).** Parse a previously uploaded BOM file (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `summary`. Now validates fixture number from Excel header, flags drawings outside the declared fixture (`fixtureMismatchCount`). Standard parts include `fixtureSeq`. `summary` includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`. |
+| `getDrawingViewUrl` | `partId: String!` | `DrawingViewUrlType` | Get a presigned GET URL to view/download a manufactured part's drawing file. Returns `viewUrl`, `partId`, `drawingNo`. Raises error if part has no drawing. |
+| `getProjectBomUploadUrl` | `projectId: String!`, `filename: String!` | `ProjectBomUploadUrlType` | **Project-level.** Get a presigned S3 upload URL for a BOM file scoped to a project (no fixture needed). Returns `uploadUrl`, `s3Key`, `projectId`. PUT the file bytes to `uploadUrl`, then call `parseProjectBomFile`. |
+| `parseProjectBomFile` | `projectId: String!`, `s3Key: String!` | `BomParseResultType` | **Project-level.** Parse BOM — fixture number is read from the Excel (cell below the cell containing "fixture"). Validates: (1) fixture number cell exists, (2) drawings belong to the declared fixture. Each manufactured part includes `fixtureSeq`, `fixtureExists`, `existingFixtureId`, `existingFixtureNumber`, `isDuplicateInProject`, `duplicateFixtures`. Each standard part includes `fixtureSeq` (from Excel header, so UI can group standard parts under the correct fixture). Summary includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`, `newFixtureSeqs`, `existingFixtureSeqs`. No DB writes. |
 
 #### Mutations
 
@@ -500,12 +521,12 @@ All operations exposed by the schema:
 |----------|-----------|---------|-------------|
 | `login` | `username: String!`, `password: String!` | `LoginResponseType` | Authenticate by username/password. Returns `accessToken`, `refreshToken`, `user` (LoginUserType), `permissions` (byRole), `tokenType`. Returns `null` on invalid credentials or inactive user. No auth required. |
 | `refresh` | `refreshToken: String!` | `TokenType` | Issue a new access token. Returns `accessToken`, `tokenType`. Returns `null` if refresh token invalid or revoked. No auth required. |
-| `createUser` | `firstName: String!`, `lastName: String!`, `username: String!`, `password: String!`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String` | `UserType` | Create a user with default role `employee`. Optional: dateOfBirth, mobileNumber, email. Requires create permission on `user` entity. |
-| `updateUser` | `userId: String!`, `firstName: String`, `lastName: String`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String`, `isActive: Boolean` | `UserType` | Update a user by id. All args except userId optional. Respects field-level write permissions. Requires update permission on `user` entity. |
+| `createUser` | `firstName: String!`, `lastName: String!`, `username: String!`, `password: String!`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String` | `UserType` | Create a user. If an `employee` role exists it is assigned automatically; otherwise the user is created with no roles. Optional: dateOfBirth, mobileNumber, email. **Requires authentication** and create permission on `user` entity. Current user is set as `createdBy`. |
+| `updateUser` | `userId: String!`, `firstName: String`, `lastName: String`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String`, `isActive: Boolean` | `UserType` | Update a user by id. All args except userId optional. Respects field-level write permissions. Requires update permission on `user` entity. Current user is set as `modifiedBy`. |
 | `changePassword` | `currentPassword: String!`, `newPassword: String!` | `Boolean!` | Change the current user's password. Requires authentication. New password min 6 characters. |
 | `setUserPassword` | `userId: String!`, `newPassword: String!` | `Boolean!` | Set another user's password (admin). Requires update permission on `user` entity. |
 | `deleteUser` | `userId: String!` | `Boolean!` | Delete a user by id. Requires delete permission on `user` entity. |
-| `deleteRole` | `roleId: String!` | `Boolean!` | Delete a role by id. System roles cannot be deleted. Requires delete permission on `role` entity. |
+| `deleteRole` | `roleId: String!` | `Boolean!` | Delete a role by id. Only role name `superadmin` cannot be deleted. Requires delete permission on `role` entity. |
 | `addUserRole` | `userId: String!`, `roleId: String!` | `UserType` | Add a role to a user. Requires update permission on `user` entity. |
 | `removeUserRole` | `userId: String!`, `roleId: String!` | `UserType` | Remove a role from a user. Requires update permission on `user` entity. |
 | `upsertRoleWithPermissions` | `name: String!`, `roleId: String`, `description: String`, `entityPermissions: [EntityPermissionInput!]`, `fieldPermissions: [FieldPermissionInput!]` | `RoleWithPermissionsType` | Create or update a role with all its permissions in one transaction. Requires update permission on `role` entity. |
@@ -530,18 +551,33 @@ All operations exposed by the schema:
 | `createPaymentTerm` | `input: PaymentTermInput!` (name, code, days, isActive) | `PaymentTermType` | Create payment term. |
 | `updatePaymentTerm` | `id: String!`, `input: PaymentTermInput!` | `PaymentTermType` | Update payment term by id. |
 | `deletePaymentTerm` | `id: String!` | `Boolean!` | Delete payment term by id. |
-| `createExpenseCategory` | `input: ExpenseCategoryInput!` (name, code, isActive) | `ExpenseCategoryType` | Create expense category. |
+| `createExpenseCategory` | `input: ExpenseCategoryInput!` (name, code, parentId, isActive) | `ExpenseCategoryType` | Create expense category. |
 | `updateExpenseCategory` | `id: String!`, `input: ExpenseCategoryInput!` | `ExpenseCategoryType` | Update expense category by id. |
 | `deleteExpenseCategory` | `id: String!` | `Boolean!` | Delete expense category by id. |
-| `createSupplier` | `input: SupplierInput!` (name, code, contactInfo, email, phone, address, isActive) | `SupplierType` | Create supplier. |
+| `createSupplier` | `input: SupplierInput!` (name, code, contactPerson, email, phone, address, isActive) | `SupplierType` | Create supplier. |
 | `updateSupplier` | `id: String!`, `input: SupplierInput!` | `SupplierType` | Update supplier by id. |
 | `deleteSupplier` | `id: String!` | `Boolean!` | Delete supplier by id. |
-| `createVendor` | `input: VendorInput!` (name, code, contactInfo, email, phone, address, isActive) | `VendorType` | Create vendor. |
+| `createVendor` | `input: VendorInput!` (name, code, contactPerson, email, phone, address, isActive) | `VendorType` | Create vendor. |
 | `updateVendor` | `id: String!`, `input: VendorInput!` | `VendorType` | Update vendor by id. |
 | `deleteVendor` | `id: String!` | `Boolean!` | Delete vendor by id. |
-| `createProduct` | `input: ProductInput!` (name, categoryId, partNo, description, make, unitId, initialStock, isActive) | `ProductType` | Create product. |
+| `createProduct` | `input: ProductInput!` (name, categoryId, partNo, description, make, unitId, quantity, isActive) | `ProductType` | Create product. |
 | `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id. |
 | `deleteProduct` | `id: String!` | `Boolean!` | Delete product by id. |
+
+**Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
+
+| Mutation | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `createProject` | `input: ProjectInput!` (name, projectNumber, customerId, description, status, startDate, targetDate, budget, purchaseBudget, designerTargetDate, procurementTargetDate, manufacturingTargetDate, qualityTargetDate, assemblyTargetDate, isActive) | `ProjectType` | Create project. `projectNumber` is the user-entered identifier (e.g. `S25049`); used as prefix for fixture and drawing numbers. All fields are required except those explicitly marked optional in `ProjectInput`. |
+| `updateProject` | `id: String!`, `input: ProjectUpdateInput!` | `ProjectType` | **Partial update.** Update project by id. All fields in `ProjectUpdateInput` are optional; only fields provided in the input object are applied. `actualDeliveryDate` write is field-permission controlled. |
+| `deleteProject` | `id: String!`, `softDelete: Boolean = true` | `Boolean!` | Soft/hard delete project by id. |
+| `assignProjectPrincipal` | `input: ProjectAssignmentInput!` (projectId, principalType=`user\|role`, principalId, accessLevel) | `ProjectAssignmentType` | Assign project to a user or role. Requires `update` permission on `project_assignment`. |
+| `removeProjectPrincipal` | `projectId: String!`, `principalType: String!`, `principalId: String!` | `Boolean!` | Remove a user/role assignment from project. Requires `update` permission on `project_assignment`. |
+| `createFixture` | `input: CreateFixtureInput!` (projectId, description, status) | `FixtureType` | Create a fixture under a project. `fixtureNumber` and `fixtureSeq` are auto-generated from `project.projectNumber`. Requires `project.projectNumber` to be set. |
+| `updateFixture` | `id: String!`, `input: UpdateFixtureInput!` (description, status, isActive) | `FixtureType` | Update fixture description, status, or active flag. |
+| `deleteFixture` | `id: String!` | `Boolean!` | Hard delete a fixture and all its BOM parts. |
+| `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions, productMatchResolutions) | `FixtureType` | **Fixture-level (legacy).** Commit a parsed BOM file to a specific fixture. Stores manufactured parts, uploads drawing files from ZIP, and links standard parts to Product master. |
+| `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions, productMatchResolutions) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM to the project. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed for the same project) are skipped. Returns the list of affected fixtures. |
 
 **Pagination types:** All list queries return `{ items, total, skip, limit, page, totalPages, hasMore }`.
 
@@ -647,8 +683,8 @@ query {
 # ----- Master Data (require master_data module enabled) -----
 # 14. Product categories list
 query {
-  productCategories(skip: 0, limit: 100, activeOnly: true) {
-    items { id categoryName parentId isActive }
+  productCategories(skip: 0, limit: 100, isActive: true) {
+    items { id categoryName parentId parentName isActive }
     total
   }
 }
@@ -656,30 +692,200 @@ query {
 # 15. Single product category
 query {
   productCategory(id: "CATEGORY_UUID") {
-    id categoryName parentId isActive
+    id categoryName parentId parentName isActive
   }
 }
 
-# 16. Customers list
+# 16. Customers list (with audit fields and creator/modifier usernames)
 query {
-  customers(skip: 0, limit: 50, activeOnly: true) {
+  customers(skip: 0, limit: 50, isActive: true) {
     items {
       id name code address contactInfo
       primaryContactName primaryContactEmail primaryContactMobile
       secondaryContactName secondaryContactEmail secondaryContactMobile
-      isActive createdAt modifiedAt
+      isActive createdAt modifiedAt createdBy createdByUsername modifiedBy modifiedByUsername
     }
     total
   }
 }
 
+# 16b. Get single customer by id (GetCustomer)
+query GetCustomer($id: String!) {
+  customer(id: $id) {
+    id name code address contactInfo
+    primaryContactName primaryContactEmail primaryContactMobile
+    secondaryContactName secondaryContactEmail secondaryContactMobile
+    isActive createdAt modifiedAt createdBy createdByUsername modifiedBy modifiedByUsername
+  }
+}
+# Variables: { "id": "CUSTOMER_UUID" }
+
 # 17. Products list (optional filter by categoryId)
 query {
-  products(skip: 0, limit: 50, categoryId: null, activeOnly: true) {
-    items { id name categoryId partNo description make unitId initialStock isActive }
+  products(skip: 0, limit: 50, categoryId: null, isActive: true) {
+    items { id name categoryId partNo description make unitId unitName quantity isActive }
     total
   }
 }
+
+# ----- Project Management & Design/BOM (require project_management module enabled) -----
+# 18. Projects list
+query {
+  projects(skip: 0, limit: 50, isActive: true) {
+    items {
+      id projectNumber name customerId customerName status isActive remainingDays
+      startDate targetDate budget
+    }
+    total page totalPages hasMore
+  }
+}
+
+# 19. Single project
+query {
+  project(id: "PROJECT_UUID") {
+    id projectNumber name customerId customerName description status
+    startDate targetDate actualDeliveryDate budget purchaseBudget isActive remainingDays
+    designerTargetDate procurementTargetDate manufacturingTargetDate qualityTargetDate assemblyTargetDate
+    createdAt createdByUsername modifiedAt modifiedByUsername
+  }
+}
+
+# 20. Fixtures list (optionally filtered by project)
+query {
+  fixtures(projectId: "PROJECT_UUID", isActive: true) {
+    items {
+      id projectId fixtureNumber fixtureSeq description status
+      s3BomKey bomFilename bomUploadedAt isActive
+    }
+    total
+  }
+}
+
+# 21. Single fixture
+query {
+  fixture(id: "FIXTURE_UUID") {
+    id projectId fixtureNumber fixtureSeq description status
+    s3BomKey bomFilename bomUploadedAt bomUploadedBy isActive
+    createdAt createdByUsername
+  }
+}
+
+# 22. BOM view (full committed BOM for a fixture, with optional search filters)
+query BomView(
+  $fixtureId: String!,
+  $drawingNo: String,
+  $drawingDesc: String,
+  $stdPartNo: String,
+  $stdName: String,
+  $stdMake: String
+) {
+  bomView(
+    fixtureId: $fixtureId
+    drawingNoContains: $drawingNo
+    drawingDescriptionContains: $drawingDesc
+    standardPartPartNoContains: $stdPartNo
+    standardPartNameContains: $stdName
+    standardPartMakeContains: $stdMake
+  ) {
+    fixture { id fixtureNumber status bomUploadedAt }
+    manufacturedParts {
+      id fixtureId srNo drawingNo description qtyLh qtyRh status
+      fixtureSeq unitSeq partSeq drawingFileS3Key
+    }
+    standardParts {
+      id fixtureId productId srNo unitId
+      partNo productName productMake
+      qty           # expected quantity from BOM line item
+      currentStock  # Product.quantity from product master
+      purchaseQty   # max(0, qty - currentStock) — how many to procure
+    }
+  }
+}
+# Example variables:
+# {
+#   "fixtureId": "FIXTURE_UUID",
+#   "drawingNo": "S25049001",
+#   "drawingDesc": null,
+#   "stdPartNo": "ISO-4762",
+#   "stdName": null,
+#   "stdMake": "Unbrako"
+# }
+#
+# Manufactured part status values:
+# - pending (default on BOM submit)
+# - inprogress
+# - quality_checked
+# - received
+
+# 23. Get presigned upload URL (before submitting BOM)
+query {
+  getDesignUploadUrl(fixtureId: "FIXTURE_UUID", filename: "BOM.zip") {
+    uploadUrl
+    s3Key
+    fixtureId
+  }
+}
+
+# 24. Parse BOM file preview (after PUT to uploadUrl)
+query {
+  parseBomFile(fixtureId: "FIXTURE_UUID", s3Key: "bom-uploads/...") {
+    manufacturedParts {
+      srNo drawingNo description qtyLh qtyRh
+      isWrongEntry wrongEntryReason
+      fixtureSeq unitSeq partSeq parsedDrawingNo hasDrawing
+      # New: duplicate detection within the same project
+      isDuplicateInProject
+      duplicateFixtures { id fixtureNumber }
+    }
+    standardParts {
+      srNo partNumber description make qty unit
+      similarProducts { id partNo name make }
+    }
+    wrongEntries { rowNum srNo rawValue reason }
+    summary { totalManufactured totalStandard wrongEntryCount }
+  }
+}
+
+# 25. Get drawing view URL (presigned GET for a manufactured part's drawing)
+query {
+  getDrawingViewUrl(partId: "PART_UUID") {
+    viewUrl
+    partId
+    drawingNo
+  }
+}
+
+# 26. Project-level BOM upload URL (no fixture needed)
+query GetProjectBomUploadUrl($projectId: String!, $filename: String!) {
+  getProjectBomUploadUrl(projectId: $projectId, filename: $filename) {
+    uploadUrl s3Key projectId
+  }
+}
+# Variables: { "projectId": "PROJECT_UUID", "filename": "BOM.zip" }
+
+# 27. Project-level parse BOM (fixture number from Excel, standard parts grouped by fixture)
+query ParseProjectBomFile($projectId: String!, $s3Key: String!) {
+  parseProjectBomFile(projectId: $projectId, s3Key: $s3Key) {
+    summary {
+      totalManufactured totalStandard wrongEntryCount
+      bomFixtureSeq fixtureMismatchCount
+      duplicateDrawingCount newFixtureSeqs existingFixtureSeqs
+    }
+    manufacturedParts {
+      srNo drawingNo description qtyLh qtyRh
+      isWrongEntry wrongEntryReason
+      fixtureSeq unitSeq partSeq parsedDrawingNo hasDrawing
+      isDuplicateInProject duplicateFixtures { id fixtureNumber }
+      fixtureExists existingFixtureId existingFixtureNumber
+    }
+    standardParts {
+      srNo partNumber description make qty unit fixtureSeq
+      similarProducts { id partNo name make }
+    }
+    wrongEntries { rowNum srNo rawValue reason }
+  }
+}
+# Variables: { "projectId": "PROJECT_UUID", "s3Key": "bom-uploads/projects/..." }
 ```
 
 #### Sample mutations (copy-paste)
@@ -746,7 +952,7 @@ mutation {
   deleteUser(userId: "USER_UUID")
 }
 
-# 8. Delete role (requires auth + delete permission on role; system roles cannot be deleted)
+# 8. Delete role (requires auth + delete permission on role; only `superadmin` cannot be deleted)
 mutation {
   deleteRole(roleId: "ROLE_UUID")
 }
@@ -845,14 +1051,14 @@ mutation {
 # 13. Create product category
 mutation {
   createProductCategory(input: { categoryName: "Electronics", parentId: null, isActive: true }) {
-    id categoryName parentId isActive
+    id categoryName parentId parentName isActive
   }
 }
 
 # 14. Update product category
 mutation {
   updateProductCategory(id: "CATEGORY_UUID", input: { categoryName: "Consumer Electronics", parentId: null, isActive: true }) {
-    id categoryName parentId isActive
+    id categoryName parentId parentName isActive
   }
 }
 
@@ -884,9 +1090,126 @@ mutation {
     unitId: "UOM_UUID"
     isActive: true
   }) {
-    id name categoryId partNo description make unitId initialStock isActive
+    id name categoryId partNo description make unitId unitName quantity isActive
   }
 }
+
+# ----- Project Management & Design/BOM (require project_management module enabled) -----
+# 17. Create project
+mutation {
+  createProject(input: {
+    name: "Hydraulic Fixture 2026"
+    projectNumber: "S25049"
+    customerId: "CUSTOMER_UUID"
+    status: "open"
+    startDate: "2026-01-01"
+    targetDate: "2026-12-31"
+    budget: 500000.00
+    isActive: true
+  }) {
+    id projectNumber name status isActive
+    createdAt createdByUsername
+  }
+}
+
+# 18. Update project
+mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) {
+  updateProject(id: $id, input: $input) {
+    id projectNumber name status procurementTargetDate
+  }
+}
+# Variables:
+# {
+#   "id": "PROJECT_UUID",
+#   "input": {
+#     "status": "in_progress",
+#     "procurementTargetDate": "2026-06-01"
+#   }
+# }
+
+# 19. Delete project (soft delete by default)
+mutation {
+  deleteProject(id: "PROJECT_UUID", softDelete: true)
+}
+
+# 20. Create fixture (requires project to have projectNumber set)
+mutation {
+  createFixture(input: {
+    projectId: "PROJECT_UUID"
+    description: "Main body fixture"
+    status: "design_pending"
+  }) {
+    id projectId fixtureNumber fixtureSeq description status isActive
+  }
+}
+
+# 21. Update fixture
+mutation {
+  updateFixture(id: "FIXTURE_UUID", input: {
+    description: "Updated description"
+    status: "design_complete"
+    isActive: true
+  }) {
+    id fixtureNumber description status isActive
+  }
+}
+
+# 22. Delete fixture
+mutation {
+  deleteFixture(id: "FIXTURE_UUID")
+}
+
+# 23. Submit BOM upload (after parseBomFile preview)
+# Step 1: getDesignUploadUrl → get uploadUrl + s3Key
+# Step 2: PUT file bytes to uploadUrl
+# Step 3: parseBomFile → review, resolve wrong entries and product matches
+# Step 4: submitBomUpload
+mutation {
+  submitBomUpload(input: {
+    fixtureId: "FIXTURE_UUID"
+    s3Key: "bom-uploads/FIXTURE_UUID/BOM.zip"
+    filename: "BOM.zip"
+    wrongEntryResolutions: [
+      {
+        originalDrawingNo: "S250490010301"
+        action: "skip"
+      }
+    ]
+    productMatchResolutions: [
+      {
+        partNumber: "BOLT-M12"
+        productId: "PRODUCT_UUID"
+      }
+    ]
+  }) {
+    id fixtureNumber status s3BomKey bomFilename bomUploadedAt
+  }
+}
+
+# 24. Project-level BOM submit (preferred for UI "Upload BOM" on a project row)
+# Step 1: getProjectBomUploadUrl → get uploadUrl + s3Key (project-scoped, no fixture needed)
+# Step 2: PUT file bytes to uploadUrl
+# Step 3: parseProjectBomFile → review (fixture IDs derived from drawing numbers, duplicates flagged)
+# Step 4: submitProjectBomUpload → auto-creates missing fixtures, skips duplicate drawings
+mutation SubmitProjectBomUpload($input: ProjectBomSubmitInput!) {
+  submitProjectBomUpload(input: $input) {
+    id fixtureNumber fixtureSeq status s3BomKey bomFilename bomUploadedAt
+  }
+}
+# Variables:
+# {
+#   "input": {
+#     "projectId": "PROJECT_UUID",
+#     "s3Key": "bom-uploads/projects/PROJECT_UUID/BOM.zip",
+#     "filename": "BOM.zip",
+#     "wrongEntryResolutions": [
+#       { "originalDrawingNo": "20x46 LG", "action": "skip" }
+#     ],
+#     "productMatchResolutions": [
+#       { "partNumber": "ISO-4762-M6x20", "productId": "PRODUCT_UUID" }
+#     ]
+#   }
+# }
 ```
 
 ---
@@ -1531,7 +1854,7 @@ mutation {
 
 ### Mutation: `createUser`
 
-**Create a new user with default role `employee`. Requires create permission on `user` entity.** Optional: `dateOfBirth`, `mobileNumber`, `email`.
+**Create a new user. Requires create permission on `user` entity.** If an `employee` role exists in the DB it is automatically assigned; otherwise the user is created with no roles. Optional: `dateOfBirth`, `mobileNumber`, `email`.
 
 ```graphql
 mutation {
@@ -1858,12 +2181,15 @@ const query = `
   - **Update / soft delete:** For each object in `session.dirty`, `modified_at` is set to current UTC.
 - No per-service calls are required; the persistence layer handles it for all entities.
 
-### createdAt & modifiedAt in GraphQL list queries
+### createdAt / modifiedAt / createdBy / modifiedBy / createdByUsername / modifiedByUsername in GraphQL list & get queries
 
-- All list-query item types expose **createdAt** and **modifiedAt** as `DateTime` (ISO 8601) in the schema.
+- All list/get item types expose **createdAt** and **modifiedAt** as `DateTime` (ISO 8601) in the schema.
+- All list/get item types also expose **createdBy** and **modifiedBy** as read-only `String` fields (user IDs).
+- All list/get item types also expose **createdByUsername** and **modifiedByUsername** as read-only `String` fields (username resolved from user ID for display).
+- **Audit stamping:** Every create mutation automatically sets `createdBy` from the current authenticated user. Every update/modify mutation automatically sets `modifiedBy` from the current user.
 - **Master data:** ProductCategory, Customer, UOM, Tax, PaymentTerm, ExpenseCategory, Supplier, Vendor, Product.
-- **Core:** User, Role.
-- Example: in `customers`, `products`, `users`, `roles`, etc., request `createdAt` and `modifiedAt` on `items { ... }`.
+- **Core:** User, Role, EntityPermission, FieldPermission, ModuleStatus.
+- Example: in `customers`, `products`, `users`, `roles`, etc., request `createdAt`, `modifiedAt`, `createdBy`, `createdByUsername`, `modifiedBy`, `modifiedByUsername` on `items { ... }`.
 
 ### Customer primary and secondary contact fields
 
@@ -2936,11 +3262,15 @@ Then update your Authorization header.
 
 **Core:** `hello`, `getEnumEntities`, `getEnumFields`, `enabledModules`, `currentUser`, `user`, `users`, `getRoles`, `getRolePermissions`, `myPermissions`, `entities`, `entityFields`.
 
+**Project Management & Design/BOM (require module `project_management` enabled):** `projects`, `project`, `projectAssignments`, `projectAssignmentBoard`, `fixtures`, `fixture`, `bomView`, `getDesignUploadUrl`, `parseBomFile`, `getDrawingViewUrl`, `getProjectBomUploadUrl`, `parseProjectBomFile`.
+
 **Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`.
 
 ✅ **Mutations (single source of truth: this document)**
 
 **Core:** `login`, `refresh`, `createUser`, `updateUser`, `changePassword`, `setUserPassword`, `deleteUser`, `deleteRole`, `addUserRole`, `removeUserRole`, `upsertRoleWithPermissions`, `setModuleEnabled`.
+
+**Project Management & Design/BOM (require module `project_management` enabled):** `createProject`, `updateProject`, `deleteProject`, `assignProjectPrincipal`, `removeProjectPrincipal`, `createFixture`, `updateFixture`, `deleteFixture`, `submitBomUpload`, `submitProjectBomUpload`.
 
 **Master Data (require module `master_data` enabled):** `createProductCategory`, `updateProductCategory`, `deleteProductCategory`, `createCustomer`, `updateCustomer`, `deleteCustomer`, `createUOM`, `updateUOM`, `deleteUOM`, `createTax`, `updateTax`, `deleteTax`, `createPaymentTerm`, `updatePaymentTerm`, `deletePaymentTerm`, `createExpenseCategory`, `updateExpenseCategory`, `deleteExpenseCategory`, `createSupplier`, `updateSupplier`, `deleteSupplier`, `createVendor`, `updateVendor`, `deleteVendor`, `createProduct`, `updateProduct`, `deleteProduct`.
 

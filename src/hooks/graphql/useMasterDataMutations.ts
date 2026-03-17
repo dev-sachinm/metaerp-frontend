@@ -5,7 +5,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { executeGraphQL } from '@/graphql/client'
 import { toast } from 'sonner'
-import { isPermissionError } from '@/lib/graphqlErrors'
+import { isPermissionError, getErrorMessage } from '@/lib/graphqlErrors'
 import {
   CREATE_PRODUCT_CATEGORY,
   UPDATE_PRODUCT_CATEGORY,
@@ -75,13 +75,14 @@ export interface PaymentTermInput {
 }
 export interface ExpenseCategoryInput {
   name: string
+  parentId?: string | null
   code: string
   isActive?: boolean
 }
 export interface SupplierInput {
   name: string
   code: string
-  contactInfo?: string | null
+  contactPerson?: string | null
   email?: string | null
   phone?: string | null
   address?: string | null
@@ -90,7 +91,7 @@ export interface SupplierInput {
 export interface VendorInput {
   name: string
   code: string
-  contactInfo?: string | null
+  contactPerson?: string | null
   email?: string | null
   phone?: string | null
   address?: string | null
@@ -103,7 +104,7 @@ export interface ProductInput {
   description?: string | null
   make?: string | null
   unitId?: string | null
-  initialStock?: number | null
+  quantity?: number | null
   isActive?: boolean
 }
 
@@ -120,7 +121,7 @@ export function useCreateProductCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Product category created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create product category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create product category')); },
   })
 }
 
@@ -133,7 +134,7 @@ export function useUpdateProductCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Product category updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update product category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update product category')); },
   })
 }
 
@@ -146,7 +147,7 @@ export function useDeleteProductCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Product category deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete product category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete product category')); },
   })
 }
 
@@ -159,7 +160,11 @@ export function useCreateCustomer() {
       invalidateMasterDataLists(qc)
       toast.success('Customer created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create customer'); },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) {
+        toast.error(getErrorMessage(error, 'Failed to create customer'))
+      }
+    },
   })
 }
 
@@ -172,7 +177,11 @@ export function useUpdateCustomer() {
       invalidateMasterDataLists(qc)
       toast.success('Customer updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update customer'); },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) {
+        toast.error(getErrorMessage(error, 'Failed to update customer'))
+      }
+    },
   })
 }
 
@@ -185,7 +194,7 @@ export function useDeleteCustomer() {
       invalidateMasterDataLists(qc)
       toast.success('Customer deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete customer'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete customer')); },
   })
 }
 
@@ -198,7 +207,7 @@ export function useCreateUOM() {
       invalidateMasterDataLists(qc)
       toast.success('UOM created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create UOM'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create UOM')); },
   })
 }
 
@@ -211,7 +220,7 @@ export function useUpdateUOM() {
       invalidateMasterDataLists(qc)
       toast.success('UOM updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update UOM'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update UOM')); },
   })
 }
 
@@ -223,7 +232,7 @@ export function useDeleteUOM() {
       invalidateMasterDataLists(qc)
       toast.success('UOM deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete UOM'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete UOM')); },
   })
 }
 
@@ -236,7 +245,7 @@ export function useCreateTax() {
       invalidateMasterDataLists(qc)
       toast.success('Tax created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create tax'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create tax')); },
   })
 }
 
@@ -249,7 +258,7 @@ export function useUpdateTax() {
       invalidateMasterDataLists(qc)
       toast.success('Tax updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update tax'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update tax')); },
   })
 }
 
@@ -261,7 +270,7 @@ export function useDeleteTax() {
       invalidateMasterDataLists(qc)
       toast.success('Tax deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete tax'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete tax')); },
   })
 }
 
@@ -274,7 +283,7 @@ export function useCreatePaymentTerm() {
       invalidateMasterDataLists(qc)
       toast.success('Payment term created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create payment term'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create payment term')); },
   })
 }
 
@@ -287,7 +296,7 @@ export function useUpdatePaymentTerm() {
       invalidateMasterDataLists(qc)
       toast.success('Payment term updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update payment term'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update payment term')); },
   })
 }
 
@@ -300,7 +309,7 @@ export function useDeletePaymentTerm() {
       invalidateMasterDataLists(qc)
       toast.success('Payment term deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete payment term'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete payment term')); },
   })
 }
 
@@ -313,7 +322,7 @@ export function useCreateExpenseCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Expense category created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create expense category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create expense category')); },
   })
 }
 
@@ -326,7 +335,7 @@ export function useUpdateExpenseCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Expense category updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update expense category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update expense category')); },
   })
 }
 
@@ -339,7 +348,7 @@ export function useDeleteExpenseCategory() {
       invalidateMasterDataLists(qc)
       toast.success('Expense category deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete expense category'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete expense category')); },
   })
 }
 
@@ -352,7 +361,7 @@ export function useCreateSupplier() {
       invalidateMasterDataLists(qc)
       toast.success('Supplier created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create supplier'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create supplier')); },
   })
 }
 
@@ -365,7 +374,7 @@ export function useUpdateSupplier() {
       invalidateMasterDataLists(qc)
       toast.success('Supplier updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update supplier'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update supplier')); },
   })
 }
 
@@ -378,7 +387,7 @@ export function useDeleteSupplier() {
       invalidateMasterDataLists(qc)
       toast.success('Supplier deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete supplier'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete supplier')); },
   })
 }
 
@@ -391,7 +400,7 @@ export function useCreateVendor() {
       invalidateMasterDataLists(qc)
       toast.success('Vendor created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create vendor'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create vendor')); },
   })
 }
 
@@ -404,7 +413,7 @@ export function useUpdateVendor() {
       invalidateMasterDataLists(qc)
       toast.success('Vendor updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update vendor'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update vendor')); },
   })
 }
 
@@ -416,7 +425,7 @@ export function useDeleteVendor() {
       invalidateMasterDataLists(qc)
       toast.success('Vendor deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete vendor'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete vendor')); },
   })
 }
 
@@ -429,7 +438,7 @@ export function useCreateProduct() {
       invalidateMasterDataLists(qc)
       toast.success('Product created')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to create product'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create product')); },
   })
 }
 
@@ -442,7 +451,7 @@ export function useUpdateProduct() {
       invalidateMasterDataLists(qc)
       toast.success('Product updated')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to update product'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update product')); },
   })
 }
 
@@ -455,6 +464,6 @@ export function useDeleteProduct() {
       invalidateMasterDataLists(qc)
       toast.success('Product deleted')
     },
-    onError: (e: Error) => { if (!isPermissionError(e)) toast.error(e.message || 'Failed to delete product'); },
+    onError: (error: unknown) => { if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete product')); },
   })
 }

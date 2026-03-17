@@ -6,7 +6,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Command } from 'cmdk';
-import { Search, User, Shield, Home, UserPlus, Loader2 } from 'lucide-react';
+import { Search, User, Shield, Home, UserPlus, Loader2, Database, PlusCircle } from 'lucide-react';
 import { useGlobalSearch, filterGlobalSearch } from '@/hooks/graphql/useCommandSearch';
 import { useDebounce } from '@/hooks/useDebounce';
 import './CommandPalette.css';
@@ -42,6 +42,30 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     { label: 'Create User', icon: UserPlus, path: '/users/create' },
   ];
 
+  const masterDataListItems = [
+    { label: 'Customers', path: '/master/customers' },
+    { label: 'Products', path: '/master/products' },
+    { label: 'Product Categories', path: '/master/product-categories' },
+    { label: 'UOM', path: '/master/uom' },
+    { label: 'Tax', path: '/master/tax' },
+    { label: 'Payment Terms', path: '/master/payment-terms' },
+    { label: 'Expense Categories', path: '/master/expense-categories' },
+    { label: 'Suppliers', path: '/master/suppliers' },
+    { label: 'Vendors', path: '/master/vendors' },
+  ];
+
+  const masterDataCreateItems = [
+    { label: 'Create Customer', path: '/master/customers/create' },
+    { label: 'Create Product', path: '/master/products/create' },
+    { label: 'Create Product Category', path: '/master/product-categories/create' },
+    { label: 'Create UOM', path: '/master/uom/create' },
+    { label: 'Create Tax', path: '/master/tax/create' },
+    { label: 'Create Payment Term', path: '/master/payment-terms/create' },
+    { label: 'Create Expense Category', path: '/master/expense-categories/create' },
+    { label: 'Create Supplier', path: '/master/suppliers/create' },
+    { label: 'Create Vendor', path: '/master/vendors/create' },
+  ];
+
   const hasSearchResults =
     (filtered?.users?.items?.length ?? 0) > 0 || (filtered?.getRoles?.length ?? 0) > 0;
   const showEmpty = !isLoading && !hasSearchResults && debouncedSearch.length > 0;
@@ -56,7 +80,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       <div className="command-input-wrapper">
         <Search className="command-icon" size={18} />
         <Command.Input
-          placeholder="Search users, roles, or go to a page..."
+          placeholder="Search users, roles, or jump to master data operations..."
           value={search}
           onValueChange={setSearch}
           className="command-input"
@@ -76,6 +100,32 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               className="command-item"
             >
               <item.icon size={16} className="command-item-icon" />
+              <span>{item.label}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
+
+        <Command.Group heading="Master Data" className="command-group">
+          {masterDataListItems.map((item) => (
+            <Command.Item
+              key={item.path}
+              onSelect={() => handleSelect(() => navigate(item.path))}
+              className="command-item"
+            >
+              <Database size={16} className="command-item-icon" />
+              <span>{item.label}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
+
+        <Command.Group heading="Master Data · Create" className="command-group">
+          {masterDataCreateItems.map((item) => (
+            <Command.Item
+              key={item.path}
+              onSelect={() => handleSelect(() => navigate(item.path))}
+              className="command-item"
+            >
+              <PlusCircle size={16} className="command-item-icon" />
               <span>{item.label}</span>
             </Command.Item>
           ))}

@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { logger } from '@/lib/logger'
 
 interface Props {
   children: ReactNode
@@ -30,9 +31,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error to console
-    console.error('Global Error Boundary caught an error:', error, errorInfo)
-    
+    logger.error('Global Error Boundary caught an error', {
+      category: 'technical',
+      error,
+      data: {
+        componentStack: errorInfo.componentStack,
+      },
+    })
+
     // Update state with error details
     this.setState({
       error,

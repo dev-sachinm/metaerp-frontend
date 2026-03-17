@@ -6,9 +6,9 @@
 const LIST_FIELDS = 'id total skip limit page totalPages hasMore'
 
 export const PRODUCT_CATEGORIES = `
-  query ProductCategories($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    productCategories(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id categoryName parentId isActive createdAt modifiedAt }
+  query ProductCategories($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    productCategories(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id categoryName parentId parentName isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -17,32 +17,34 @@ export const PRODUCT_CATEGORIES = `
 export const PRODUCT_CATEGORY = `
   query ProductCategory($id: String!) {
     productCategory(id: $id) {
-      id categoryName parentId isActive
+      id categoryName parentId parentName isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
+/** Customers list (aligned with BACKEND_IMPLEMENTATION_STATE.md §16) */
 export const CUSTOMERS = `
-  query Customers($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    customers(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive createdAt modifiedAt }
+  query Customers($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    customers(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
 `
 
+/** Get single customer by id (aligned with BACKEND_IMPLEMENTATION_STATE.md §16b GetCustomer) */
 export const CUSTOMER = `
-  query Customer($id: String!) {
+  query GetCustomer($id: String!) {
     customer(id: $id) {
-      id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive
+      id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const UOM_LIST = `
-  query UOMList($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    uomList(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id code name isActive createdAt modifiedAt }
+  query UOMList($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    uomList(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id code name isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -51,15 +53,15 @@ export const UOM_LIST = `
 export const UOM = `
   query UOM($id: String!) {
     uom(id: $id) {
-      id code name isActive
+      id code name isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const TAX_LIST = `
-  query TaxList($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    taxList(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code ratePercent isActive createdAt modifiedAt }
+  query TaxList($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    taxList(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name code ratePercent isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -68,15 +70,15 @@ export const TAX_LIST = `
 export const TAX = `
   query Tax($id: String!) {
     tax(id: $id) {
-      id name code ratePercent isActive
+      id name code ratePercent isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const PAYMENT_TERMS_LIST = `
-  query PaymentTermsList($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    paymentTermsList(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code days isActive createdAt modifiedAt }
+  query PaymentTermsList($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    paymentTermsList(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name code days isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -85,15 +87,15 @@ export const PAYMENT_TERMS_LIST = `
 export const PAYMENT_TERM = `
   query PaymentTerm($id: String!) {
     paymentTerm(id: $id) {
-      id name code days isActive
+      id name code days isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const EXPENSE_CATEGORIES_LIST = `
-  query ExpenseCategoriesList($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    expenseCategoriesList(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code isActive createdAt modifiedAt }
+  query ExpenseCategoriesList($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    expenseCategoriesList(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name parentId parentName code isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -102,15 +104,15 @@ export const EXPENSE_CATEGORIES_LIST = `
 export const EXPENSE_CATEGORY = `
   query ExpenseCategory($id: String!) {
     expenseCategory(id: $id) {
-      id name code isActive
+      id name parentId parentName code isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const SUPPLIERS = `
-  query Suppliers($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    suppliers(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code contactInfo email phone address isActive createdAt modifiedAt }
+  query Suppliers($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    suppliers(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -119,15 +121,15 @@ export const SUPPLIERS = `
 export const SUPPLIER = `
   query Supplier($id: String!) {
     supplier(id: $id) {
-      id name code contactInfo email phone address isActive
+      id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const VENDORS = `
-  query Vendors($skip: Int!, $limit: Int!, $activeOnly: Boolean) {
-    vendors(skip: $skip, limit: $limit, activeOnly: $activeOnly) {
-      items { id name code contactInfo email phone address isActive createdAt modifiedAt }
+  query Vendors($skip: Int!, $limit: Int!, $isActive: Boolean) {
+    vendors(skip: $skip, limit: $limit, isActive: $isActive) {
+      items { id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
@@ -136,24 +138,39 @@ export const VENDORS = `
 export const VENDOR = `
   query Vendor($id: String!) {
     vendor(id: $id) {
-      id name code contactInfo email phone address isActive
+      id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
     }
   }
 `
 
 export const PRODUCTS = `
-  query Products($skip: Int!, $limit: Int!, $categoryId: String, $activeOnly: Boolean) {
-    products(skip: $skip, limit: $limit, categoryId: $categoryId, activeOnly: $activeOnly) {
-      items { id name categoryId partNo description make unitId initialStock isActive createdAt modifiedAt }
+  query Products($skip: Int!, $limit: Int!, $categoryId: String, $isActive: Boolean) {
+    products(skip: $skip, limit: $limit, categoryId: $categoryId, isActive: $isActive) {
+      items { id name categoryId partNo description make unitId unitName quantity isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
       ${LIST_FIELDS}
     }
   }
 `
 
 export const PRODUCT = `
-  query Product($id: String!) {
+  query GetProduct($id: String!) {
     product(id: $id) {
-      id name categoryId partNo description make unitId initialStock isActive
+      id
+      categoryId
+      partNo
+      name
+      description
+      make
+      unitId
+      unitName
+      quantity
+      isActive
+      createdAt
+      modifiedAt
+      createdBy
+      createdByUsername
+      modifiedBy
+      modifiedByUsername
     }
   }
 `

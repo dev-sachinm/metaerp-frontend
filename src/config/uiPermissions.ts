@@ -1,0 +1,57 @@
+/**
+ * UI Action → Backend Permission mapping.
+ * Single source of truth for which backend entity+action gates each UI button/action.
+ *
+ * Rules:
+ * - Never check role names in components. Check UI_PERMISSIONS keys instead.
+ * - When a new role is added on the backend, grant the right entity permissions there.
+ *   The frontend automatically shows/hides actions with zero code changes.
+ * - When a new UI action is added, add one entry here and use useUIPermission() in the component.
+ */
+
+import type { PermissionAction } from '@/hooks/usePermissions'
+
+interface UIPermissionDef {
+  entity: string
+  action: PermissionAction
+}
+
+export const UI_PERMISSIONS = {
+  // ── Project ──────────────────────────────────────────────────────────────────
+  CREATE_PROJECT:      { entity: 'project', action: 'create' },
+  EDIT_PROJECT:        { entity: 'project', action: 'update' },
+  DELETE_PROJECT:      { entity: 'project', action: 'delete' },
+  VIEW_PROJECT:        { entity: 'project', action: 'read'   },
+
+  // ── BOM / Fixtures ────────────────────────────────────────────────────────
+  UPLOAD_BOM:          { entity: 'fixture', action: 'update' },
+  VIEW_BOM:            { entity: 'fixture', action: 'read'   },
+
+  // ── Project Assignments ───────────────────────────────────────────────────
+  ASSIGN_PROJECT:      { entity: 'project_assignment', action: 'update' },
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  CREATE_USER:         { entity: 'user', action: 'create' },
+  EDIT_USER:           { entity: 'user', action: 'update' },
+  DELETE_USER:         { entity: 'user', action: 'delete' },
+
+  // ── Roles ─────────────────────────────────────────────────────────────────
+  MANAGE_ROLE_PERMS:   { entity: 'role', action: 'update' },
+  DELETE_ROLE:         { entity: 'role', action: 'delete' },
+
+  // ── Master Data (generic — entity-level create/update/delete) ─────────────
+  CREATE_CUSTOMER:     { entity: 'customer',         action: 'create' },
+  EDIT_CUSTOMER:       { entity: 'customer',         action: 'update' },
+  DELETE_CUSTOMER:     { entity: 'customer',         action: 'delete' },
+  CREATE_PRODUCT:      { entity: 'product',          action: 'create' },
+  EDIT_PRODUCT:        { entity: 'product',          action: 'update' },
+  DELETE_PRODUCT:      { entity: 'product',          action: 'delete' },
+  CREATE_SUPPLIER:     { entity: 'supplier',         action: 'create' },
+  EDIT_SUPPLIER:       { entity: 'supplier',         action: 'update' },
+  DELETE_SUPPLIER:     { entity: 'supplier',         action: 'delete' },
+  CREATE_VENDOR:       { entity: 'vendor',           action: 'create' },
+  EDIT_VENDOR:         { entity: 'vendor',           action: 'update' },
+  DELETE_VENDOR:       { entity: 'vendor',           action: 'delete' },
+} satisfies Record<string, UIPermissionDef>
+
+export type UIPermissionKey = keyof typeof UI_PERMISSIONS

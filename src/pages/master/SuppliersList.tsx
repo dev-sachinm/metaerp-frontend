@@ -33,6 +33,7 @@ export function SuppliersList() {
     const cols: { header: string; cell: (r: Supplier) => ReactNode }[] = []
     if (canShowColumn(readableFields, 'code')) cols.push({ header: 'Code', cell: (r: Supplier) => <span className="font-medium">{r.code}</span> })
     if (canShowColumn(readableFields, 'name')) cols.push({ header: 'Name', cell: (r: Supplier) => r.name })
+    if (canShowColumn(readableFields, 'contactPerson')) cols.push({ header: 'Contact Person', cell: (r: Supplier) => r.contactPerson ?? '—' })
     if (canShowColumn(readableFields, 'email')) cols.push({ header: 'Email', cell: (r: Supplier) => r.email ?? '—' })
     if (canShowColumn(readableFields, 'phone')) cols.push({ header: 'Phone', cell: (r: Supplier) => r.phone ?? '—' })
     if (canShowColumn(readableFields, 'address')) cols.push({ header: 'Address', cell: (r: Supplier) => r.address ?? '—' })
@@ -44,6 +45,12 @@ export function SuppliersList() {
         ),
       })
     }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: Supplier) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: Supplier) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
+    }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: Supplier) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
     }
@@ -52,6 +59,9 @@ export function SuppliersList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: Supplier) =>
+    `${r.code ?? ''} ${r.name ?? ''} ${r.contactPerson ?? ''} ${r.email ?? ''} ${r.phone ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<Supplier>
@@ -63,6 +73,9 @@ export function SuppliersList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code, name, or contact…"
+      getSearchText={getSearchText}
       getEditHref={(r) => '/master/suppliers/' + r.id + '/edit'}
       onDelete={handleDelete}
       deletePending={deleteSup.isPending}
