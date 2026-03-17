@@ -3,7 +3,7 @@
  * Requires role.update permission. Uses getRolePermissions query + upsertRoleWithPermissions mutation.
  */
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef, memo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Command } from 'cmdk'
@@ -57,6 +57,14 @@ import {
   Search,
 } from 'lucide-react'
 
+function humanizeKey(key: string): string {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function toInput(ep: EntityPermission): EntityPermissionInput {
   return {
     entityName: ep.entityName,
@@ -89,8 +97,11 @@ export function ManageRolePermissions() {
   const upsertPermissions = useUpsertRoleWithPermissions()
 
   const enumEntities: EntityEnumItem[] = enumEntitiesData?.getEnumEntities ?? []
-  const getEntityDisplayName = (key: string) =>
-    enumEntitiesLoading ? '…' : (enumEntities.find((e) => e.key === key)?.displayName ?? '…')
+  const getEntityDisplayName = useCallback((key: string) =>
+    enumEntitiesLoading
+      ? humanizeKey(key)
+      : (enumEntities.find((e) => e.key === key)?.displayName ?? humanizeKey(key))
+  , [enumEntitiesLoading, enumEntities])
 
   const [entityPerms, setEntityPerms] = useState<EntityPermissionInput[]>([])
   const [fieldPerms, setFieldPerms] = useState<FieldPermissionInput[]>([])
@@ -110,22 +121,35 @@ export function ManageRolePermissions() {
   }, [entityPerms, entityFilter, enumEntities, enumEntitiesLoading])
 
   // Source of truth: database. Sync local state from getRolePermissions whenever it changes.
+  // Combined into single effect to prevent double-updates and blinking
   useEffect(() => {
     const rp = rolePermsData?.getRolePermissions
     if (!rolePermsData) return
+
     if (!rp) {
-      setEntityPerms([])
+      // If role has no explicit permissions yet, show exactly backend enum entities as toggles.
+      const base = (enumEntities ?? []).map((e) => ({ entityName: e.key, canCreate: false, canRead: false, canUpdate: false, canDelete: false }))
+      setEntityPerms(base)
       setFieldPerms([])
       return
     }
-    setEntityPerms(rp.entityPermissions?.map(toInput) ?? [])
-  }, [rolePermsData])
 
-  useEffect(() => {
-    const rp = rolePermsData?.getRolePermissions
-    if (!rolePermsData || !rp) return
+    const existingMap = new Map((rp.entityPermissions?.map(toInput) ?? []).map((ep) => [ep.entityName, ep]))
+
+    // Show exactly backend enum entities from getEnumEntities (straight mapping).
+    const alignedToEnum = (enumEntities ?? []).map((e) =>
+      existingMap.get(e.key) ?? {
+        entityName: e.key,
+        canCreate: false,
+        canRead: false,
+        canUpdate: false,
+        canDelete: false,
+      }
+    )
+
+    setEntityPerms(alignedToEnum)
     setFieldPerms(rp.fieldPermissions?.map(toFieldInput) ?? [])
-  }, [rolePermsData])
+  }, [rolePermsData, enumEntities])
 
   const updateEntityPerm = useCallback((index: number, key: keyof EntityPermissionInput, value: boolean) => {
     setEntityPerms((prev) => {
@@ -403,7 +427,7 @@ export function ManageRolePermissions() {
   )
 }
 
-function FieldRowsWithDisplayNames({
+const FieldRowsWithDisplayNames = memo(function FieldRowsWithDisplayNames({
   entityKey,
   rows,
   onUpdate,
@@ -418,7 +442,8 @@ function FieldRowsWithDisplayNames({
 }) {
   const { data: fieldsData } = useEnumFields(entityKey)
   const fieldItems = fieldsData?.getEnumFields ?? []
-  const getDisplayName = (fieldKey: string) => fieldItems.find((f) => f.key === fieldKey)?.displayName ?? '…'
+  const getDisplayName = (fieldKey: string) =>
+    fieldItems.find((f) => f.key === fieldKey)?.displayName ?? humanizeKey(fieldKey)
   return (
     <>
       {rows.map(({ index, perm }) => (
@@ -443,11 +468,9 @@ function FieldRowsWithDisplayNames({
       ))}
     </>
   )
-}
+})
 
 const ROW_HEIGHT = 72
-const FIELD_ENTITY_ROW_COLLAPSED = 52
-const FIELD_ENTITY_ROW_EXPANDED = 320
 
 function VirtualizedFieldEntityList({
   entityNames,
@@ -478,13 +501,6 @@ function VirtualizedFieldEntityList({
   disabled: boolean
   emptyMessage?: string
 }) {
-  const parentRef = useRef<HTMLDivElement>(null)
-  const virtualizer = useVirtualizer({
-    count: entityNames.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) => (expandedEntity === entityNames[index] ? FIELD_ENTITY_ROW_EXPANDED : FIELD_ENTITY_ROW_COLLAPSED),
-    overscan: 3,
-  })
   if (entityNames.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-slate-500">
@@ -492,76 +508,51 @@ function VirtualizedFieldEntityList({
       </p>
     )
   }
+  
   return (
-    <div ref={parentRef} className="h-[min(400px,50vh)] overflow-auto rounded-lg border border-slate-200">
-      <div
-        style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
-        className="w-full"
-      >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const entityName = entityNames[virtualRow.index]
-          const rows = byEntity[entityName] ?? []
-          return (
-            <div
-              key={entityName}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-              className="px-1 pb-1"
+    <div className="space-y-2 max-h-[min(600px,70vh)] overflow-y-auto rounded-lg border border-slate-200 p-1">
+      {entityNames.map((entityName) => {
+        const rows = byEntity[entityName] ?? []
+        return (
+          <div key={entityName} className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-visible">
+            <button
+              type="button"
+              onClick={() => setExpandedEntity(expandedEntity === entityName ? null : entityName)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
             >
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setExpandedEntity(expandedEntity === entityName ? null : entityName)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                >
-                  {expandedEntity === entityName ? (
-                    <ChevronDown className="h-4 w-4 text-slate-500" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-500" />
-                  )}
-                  <Badge variant="secondary">{getEntityDisplayName(entityName)}</Badge>
-                  <span className="text-sm text-slate-500">
-                    {rows.length} field{rows.length !== 1 ? 's' : ''}
-                  </span>
-                </button>
-                <AnimatePresence>
-                  {expandedEntity === entityName && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-slate-100"
-                    >
-                      <div className="p-4 space-y-3">
-                        <FieldRowsWithDisplayNames
-                          entityKey={entityName}
-                          rows={rows}
-                          onUpdate={onUpdate}
-                          onRemove={onRemove}
-                          disabled={disabled}
-                        />
-                        <AddFieldDialog
-                          enumEntities={enumEntities}
-                          existingEntityPerms={entityPerms.map((e) => e.entityName)}
-                          existingFieldPerms={fieldPerms}
-                          onAdd={onAdd}
-                          entityPreSelect={entityName}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+              {expandedEntity === entityName ? (
+                <ChevronDown className="h-4 w-4 text-slate-500" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-slate-500" />
+              )}
+              <Badge variant="secondary">{getEntityDisplayName(entityName)}</Badge>
+              <span className="text-sm text-slate-500">
+                {rows.length} field{rows.length !== 1 ? 's' : ''}
+              </span>
+            </button>
+            {expandedEntity === entityName && (
+              <div className="border-t border-slate-100">
+                <div className="p-4 space-y-3">
+                  <FieldRowsWithDisplayNames
+                    entityKey={entityName}
+                    rows={rows}
+                    onUpdate={onUpdate}
+                    onRemove={onRemove}
+                    disabled={disabled}
+                  />
+                  <AddFieldDialog
+                    enumEntities={enumEntities}
+                    existingEntityPerms={entityPerms.map((e) => e.entityName)}
+                    existingFieldPerms={fieldPerms}
+                    onAdd={onAdd}
+                    entityPreSelect={entityName}
+                  />
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/table'
 import { Loader } from '@/components/Loader'
 import { OperationNotPermitted } from '@/components/OperationNotPermitted'
-import { PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { PlusCircle, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { isPermissionError, getErrorMessage } from '@/lib/graphqlErrors'
+import { Input } from '@/components/ui/input'
 
 interface MasterDataListPageProps<T> {
   title: string
@@ -24,7 +25,9 @@ interface MasterDataListPageProps<T> {
   total: number
   items: T[]
   columns: { header: string; cell: (row: T) => ReactNode }[]
+  getViewHref?: (row: T) => string
   getEditHref?: (row: T) => string
+  onRowClick?: (row: T) => void
   onDelete?: (row: T) => void
   deletePending?: boolean
   page: number
@@ -36,6 +39,10 @@ interface MasterDataListPageProps<T> {
   error?: unknown
   /** Optional refetch (e.g. from useQuery) for "Try again" on generic error */
   onRetry?: () => void
+  /** Optional search support (simple client-side filter within current page) */
+  enableSearch?: boolean
+  searchPlaceholder?: string
+  getSearchText?: (row: T) => string
 }
 
 export function MasterDataListPage<T extends { id: string }>({
@@ -47,7 +54,9 @@ export function MasterDataListPage<T extends { id: string }>({
   total,
   items,
   columns,
+  getViewHref,
   getEditHref,
+  onRowClick,
   onDelete,
   deletePending,
   page,
@@ -57,36 +66,65 @@ export function MasterDataListPage<T extends { id: string }>({
   isError,
   error,
   onRetry,
+  enableSearch,
+  searchPlaceholder,
+  getSearchText,
 }: MasterDataListPageProps<T>) {
+  const [search, setSearch] = useState('')
+  const normalizedSearch = search.trim().toLowerCase()
+
+  const filteredItems = useMemo(() => {
+    if (!enableSearch || !normalizedSearch || !getSearchText) return items
+    return items.filter((row) => {
+      try {
+        const text = getSearchText(row)
+        return text.toLowerCase().includes(normalizedSearch)
+      } catch {
+        return false
+      }
+    })
+  }, [items, enableSearch, normalizedSearch, getSearchText])
+
+  const effectiveTotal = enableSearch && normalizedSearch ? filteredItems.length : total
   const start = page * pageSize
-  const end = Math.min(start + pageSize, items.length)
-  const showPagination = totalPages > 1
-  const hasActions = getEditHref || onDelete
+  const end = Math.min(start + pageSize, filteredItems.length)
+  const showPagination = !normalizedSearch && totalPages > 1
+  const hasActions = getViewHref || getEditHref || onDelete
   const queryFailed = Boolean(isError && error)
   const permissionDenied = queryFailed && isPermissionError(error)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold text-slate-900 truncate">{title}</h2>
           {description && <p className="text-slate-600 text-sm mt-0.5">{description}</p>}
         </div>
-        {createHref && (
-          <Button asChild size="sm" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-            <Link to={createHref}>
-              <PlusCircle className="h-4 w-4" />
-              {createLabel}
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {enableSearch && (
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={searchPlaceholder ?? 'Search...'}
+              className="h-8 w-40 sm:w-56 md:w-64"
+            />
+          )}
+          {createHref && (
+            <Button asChild size="sm" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+              <Link to={createHref}>
+                <PlusCircle className="h-4 w-4" />
+                {createLabel}
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{title} ({total})</CardTitle>
+          <CardTitle>{title} ({effectiveTotal})</CardTitle>
           <CardDescription>
-            {total === 0 ? 'No records yet.' : `Showing ${start + 1}-${end} of ${total}.`}
+            {effectiveTotal === 0 ? 'No records yet.' : `Showing ${start + 1}-${end} of ${effectiveTotal}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -105,7 +143,7 @@ export function MasterDataListPage<T extends { id: string }>({
                 </Button>
               )}
             </div>
-          ) : items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <p className="font-medium">No records found</p>
               {createHref && (
@@ -126,14 +164,26 @@ export function MasterDataListPage<T extends { id: string }>({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((row) => (
-                    <TableRow key={row.id}>
+                  {filteredItems.slice(start, end).map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className={onRowClick ? 'cursor-pointer hover:bg-slate-50' : undefined}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    >
                       {columns.map((col, i) => (
                         <TableCell key={i}>{col.cell(row)}</TableCell>
                       ))}
                       {hasActions && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
+                            {getViewHref && (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link to={getViewHref(row)}>
+                                  <Eye className="h-3.5 w-3.5 mr-1" />
+                                  View
+                                </Link>
+                              </Button>
+                            )}
                             {getEditHref && (
                               <Button variant="ghost" size="sm" asChild>
                                 <Link to={getEditHref(row)}>Edit</Link>

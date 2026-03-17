@@ -1,6 +1,7 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { DashboardLayout } from '@/layouts/DashboardLayout'
 import { MASTER_DATA_NAV } from '@/config/masterDataNav'
+import { MasterDataNavItem } from '@/components/MasterDataNavItem'
 
 export function MasterDataLayout() {
 
@@ -14,19 +15,7 @@ export function MasterDataLayout() {
 
         <nav className="flex flex-wrap gap-1 mb-6 border-b border-slate-200 pb-4">
           {MASTER_DATA_NAV.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-indigo-100 text-indigo-800'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
+            <MasterDataNavItem key={item.path} item={item} />
           ))}
         </nav>
 

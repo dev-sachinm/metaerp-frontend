@@ -4,14 +4,14 @@
  */
 
 const PC_FIELDS = 'id categoryName parentId isActive'
-const CUST_FIELDS = 'id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive'
+const CUST_FIELDS = 'id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive createdAt modifiedAt'
 const UOM_FIELDS = 'id code name isActive'
 const TAX_FIELDS = 'id name code ratePercent isActive'
 const PT_FIELDS = 'id name code days isActive'
-const EC_FIELDS = 'id name code isActive'
-const SUP_FIELDS = 'id name code contactInfo email phone address isActive'
-const VEND_FIELDS = 'id name code contactInfo email phone address isActive'
-const PROD_FIELDS = 'id name categoryId partNo description make unitId initialStock isActive'
+const EC_FIELDS = 'id name parentId code isActive'
+const SUP_FIELDS = 'id name code contactPerson email phone address isActive'
+const VEND_FIELDS = 'id name code contactPerson email phone address isActive'
+const PROD_FIELDS = 'id name categoryId partNo description make unitId unitName quantity isActive'
 
 export const CREATE_PRODUCT_CATEGORY = `
   mutation CreateProductCategory($input: ProductCategoryInput!) {
@@ -29,16 +29,19 @@ export const DELETE_PRODUCT_CATEGORY = `
   }
 `
 
+/** Create customer (BACKEND_IMPLEMENTATION_STATE.md §15 createCustomer) */
 export const CREATE_CUSTOMER = `
   mutation CreateCustomer($input: CustomerInput!) {
     createCustomer(input: $input) { ${CUST_FIELDS} }
   }
 `
+/** Update customer by id (BACKEND_IMPLEMENTATION_STATE.md updateCustomer) */
 export const UPDATE_CUSTOMER = `
   mutation UpdateCustomer($id: String!, $input: CustomerInput!) {
     updateCustomer(id: $id, input: $input) { ${CUST_FIELDS} }
   }
 `
+/** Delete customer by id; returns Boolean! (BACKEND_IMPLEMENTATION_STATE.md deleteCustomer) */
 export const DELETE_CUSTOMER = `
   mutation DeleteCustomer($id: String!) {
     deleteCustomer(id: $id)

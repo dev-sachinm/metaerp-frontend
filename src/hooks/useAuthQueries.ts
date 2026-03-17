@@ -3,12 +3,13 @@
  * Handles data fetching, caching, and synchronization
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
 import { useCurrentUser } from '@/hooks/graphql/useUsersQuery'
-import { useMyPermissions } from '@/hooks/graphql/usePermissionsQuery'
+import { useMyPermissions, permissionKeys } from '@/hooks/graphql/usePermissionsQuery'
 import { authService } from '@/services/authService'
 import { useLogin as useGraphQLLogin } from '@/hooks/graphql/useAuthMutation'
 import { User, PermissionsResponse } from '@/types/auth'
@@ -86,15 +87,29 @@ export function useAuth() {
 }
 
 /**
- * Hook to refresh user permissions
- * Used when 403 error is encountered
+ * Hook to refresh user permissions from the backend.
+ * Refetches myPermissions and syncs the result into the auth store so newly enabled
+ * fields/entities appear without re-login.
  */
 export function useRefreshPermissions() {
+  const queryClient = useQueryClient()
+  const { setPermissions } = useAuthStore()
+  const [isPending, setIsPending] = useState(false)
+
   return {
     mutate: async () => {
+      setIsPending(true)
       try {
-        // This would need a proper implementation with queryClient
-        // For now, just show a success toast
+        queryClient.invalidateQueries({ queryKey: permissionKeys.my() })
+        await queryClient.refetchQueries({ queryKey: permissionKeys.my() })
+        const queriesData = queryClient.getQueriesData<{ myPermissions: { byRole?: unknown } }>({
+          queryKey: permissionKeys.my(),
+        })
+        const entry = queriesData.find(([, data]) => data?.myPermissions != null)
+        if (entry?.[1]?.myPermissions) {
+          const converted = convertGraphQLPermissionsToAuth(entry[1].myPermissions)
+          setPermissions(converted)
+        }
         toast.success('Permissions refreshed')
       } catch (error) {
         logger.error('Failed to refresh permissions', {
@@ -102,8 +117,11 @@ export function useRefreshPermissions() {
           error,
         })
         toast.error('Failed to refresh permissions')
+      } finally {
+        setIsPending(false)
       }
     },
+    isPending,
   }
 }
 

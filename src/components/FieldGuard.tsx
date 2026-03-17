@@ -1,10 +1,17 @@
 /**
  * Field Guard Component
- * Controls visibility and editability of form fields based on permissions
+ * Controls visibility and editability of form fields based on permissions.
+ *
+ * action="read"  → visible if canRead OR canWrite (write implies read)
+ * action="write" → visible only if canWrite
+ *
+ * When no field permissions are configured on the backend for this entity,
+ * canRead and canWrite both return false — in that case we fall back to showing
+ * the field (no field-level config = no restriction).
  */
 
 import { ReactNode } from 'react'
-import { useCanReadField, useCanEditField } from '@/hooks/usePermissions'
+import { useCanReadField, useCanEditField, useFieldPermissions } from '@/hooks/usePermissions'
 
 interface FieldGuardProps {
   entity: string
@@ -14,21 +21,6 @@ interface FieldGuardProps {
   children: ReactNode
 }
 
-/**
- * Field-level permission guard
- * Hides/disables form fields based on permissions
- * 
- * @example
- * // Show field only if readable
- * <FieldGuard entity="user" fieldName="salary" action="read">
- *   <div>{user.salary}</div>
- * </FieldGuard>
- * 
- * // Show input only if writable
- * <FieldGuard entity="user" fieldName="email" action="write">
- *   <Input {...register('email')} />
- * </FieldGuard>
- */
 export function FieldGuard({
   entity,
   fieldName,
@@ -36,10 +28,16 @@ export function FieldGuard({
   fallback = null,
   children,
 }: FieldGuardProps) {
+  const fieldPerms = useFieldPermissions(entity)
   const canRead = useCanReadField(entity, fieldName)
   const canWrite = useCanEditField(entity, fieldName)
 
-  const hasPermission = action === 'read' ? canRead : canWrite
+  // No field-level permissions configured for this entity → show all fields
+  if (!fieldPerms || Object.keys(fieldPerms).length === 0) {
+    return <>{children}</>
+  }
+
+  const hasPermission = action === 'write' ? canWrite : (canRead || canWrite)
 
   if (!hasPermission) {
     return <>{fallback}</>

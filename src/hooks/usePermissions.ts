@@ -1,12 +1,15 @@
 /**
  * Dynamic Permission System
  * Scalable architecture for handling 100s of entities and fields
- * Provides hooks for checking any permission at entity, action, or field level
- * Backend sends all permissions for every user (including superusers)
+ * Backend sends all permissions for every user (including superusers).
+ * Entity names are the keys in myPermissions.byRole (GraphQL = source of truth);
+ * we resolve UI entity names to that key so e.g. 'uom' matches backend 'unit_of_measure' when present.
  */
 
 import { usePermissions } from '@/stores/authStore'
 import { useMemo } from 'react'
+import { resolvePermissionEntityKey } from '@/lib/permissionEntityKey'
+import { UI_PERMISSIONS, type UIPermissionKey } from '@/config/uiPermissions'
 
 /**
  * Permission action types
@@ -28,16 +31,10 @@ export function useCanAccess(
   action: PermissionAction
 ): boolean {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return false
-  }
-
-  const entityPerms = permissions.entities?.[entity]
-  if (!entityPerms) {
-    return false
-  }
-
+  if (!permissions?.entities) return false
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  const entityPerms = permissions.entities[key]
+  if (!entityPerms) return false
   return entityPerms[action] === true
 }
 
@@ -53,21 +50,14 @@ export function useCanAccessMultiple(
   
   return useMemo(() => {
     const result: Record<string, boolean> = {}
-    
-    if (!permissions) {
-      actions.forEach(action => {
-        result[`can${action.charAt(0).toUpperCase() + action.slice(1)}`] = false
-      })
-      return result
-    }
-
-    const entityPerms = permissions.entities?.[entity]
-    
+    const cap = (a: string) => `can${a.charAt(0).toUpperCase() + a.slice(1)}`
+    actions.forEach(action => { result[cap(action)] = false })
+    if (!permissions?.entities) return result
+    const key = resolvePermissionEntityKey(entity, permissions.entities)
+    const entityPerms = permissions.entities[key]
     actions.forEach(action => {
-      const key = `can${action.charAt(0).toUpperCase() + action.slice(1)}`
-      result[key] = entityPerms?.[action] === true
+      result[cap(action)] = entityPerms?.[action] === true
     })
-    
     return result
   }, [permissions, entity, actions])
 }
@@ -79,20 +69,11 @@ export function useCanAccessMultiple(
  */
 export function useHasEntityAccess(entity: string): boolean {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return false
-  }
-
-  const entityPerms = permissions.entities?.[entity]
-  if (!entityPerms) {
-    return false
-  }
-
-  // Check if any action is allowed
-  // Note: Backend may not send 'list' field, so treat 'read' as allowing list
+  if (!permissions?.entities) return false
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  const entityPerms = permissions.entities[key]
+  if (!entityPerms) return false
   const canList = entityPerms.list === true || entityPerms.read === true
-
   return (
     entityPerms.create === true ||
     entityPerms.read === true ||
@@ -137,17 +118,10 @@ export function useAccessibleEntities(): string[] {
  */
 export function useCanEditField(entity: string, fieldName: string): boolean {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return false
-  }
-
-  const fieldPerms = permissions.entities?.[entity]?.fields?.[fieldName]
-  if (!fieldPerms) {
-    return false
-  }
-
-  return fieldPerms.write === true
+  if (!permissions?.entities) return false
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  const fieldPerms = getFieldPerms(permissions.entities[key]?.fields, fieldName)
+  return fieldPerms?.write === true
 }
 
 /**
@@ -156,17 +130,10 @@ export function useCanEditField(entity: string, fieldName: string): boolean {
  */
 export function useCanReadField(entity: string, fieldName: string): boolean {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return false
-  }
-
-  const fieldPerms = permissions.entities?.[entity]?.fields?.[fieldName]
-  if (!fieldPerms) {
-    return false
-  }
-
-  return fieldPerms.read === true
+  if (!permissions?.entities) return false
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  const fieldPerms = getFieldPerms(permissions.entities[key]?.fields, fieldName)
+  return fieldPerms?.read === true
 }
 
 /**
@@ -175,12 +142,9 @@ export function useCanReadField(entity: string, fieldName: string): boolean {
  */
 export function useEntityPermissions(entity: string) {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return null
-  }
-
-  return permissions.entities?.[entity] ?? null
+  if (!permissions?.entities) return null
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  return permissions.entities[key] ?? null
 }
 
 /**
@@ -189,12 +153,9 @@ export function useEntityPermissions(entity: string) {
  */
 export function useFieldPermissions(entity: string) {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return null
-  }
-
-  return permissions.entities?.[entity]?.fields ?? null
+  if (!permissions?.entities) return null
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  return permissions.entities[key]?.fields ?? null
 }
 
 /**
@@ -203,15 +164,10 @@ export function useFieldPermissions(entity: string) {
  */
 export function useFieldAccess(entity: string, fieldName: string): FieldAccessLevel | null {
   const permissions = usePermissions()
-  
-  if (!permissions) {
-    return 'hidden'
-  }
-
-  const fieldPerms = permissions.entities?.[entity]?.fields?.[fieldName]
-  if (!fieldPerms) {
-    return 'hidden'
-  }
+  if (!permissions?.entities) return 'hidden'
+  const key = resolvePermissionEntityKey(entity, permissions.entities)
+  const fieldPerms = getFieldPerms(permissions.entities[key]?.fields, fieldName)
+  if (!fieldPerms) return 'hidden'
 
   // Determine access level
   if (fieldPerms.write === true) {
@@ -224,31 +180,42 @@ export function useFieldAccess(entity: string, fieldName: string): FieldAccessLe
 }
 
 /**
- * Get accessible fields for an entity
+ * Get accessible fields for an entity.
+ * Returns:
+ *   null          — no field permissions configured for this entity; callers should show ALL fields (fallback)
+ *   string[]      — field perms are configured; only listed fields are readable/writable
+ *   [] (empty)    — field perms configured but none readable for this access type
+ *
  * Usage: const visibleFields = useAccessibleFields('user', 'read')
- * Returns array of field names user can access
  */
 export function useAccessibleFields(
   entity: string,
   accessType: 'read' | 'write' = 'read'
-): string[] {
+): string[] | null {
   const permissions = usePermissions()
-  
   return useMemo(() => {
-    if (!permissions?.entities?.[entity]?.fields) {
-      return []
-    }
-
-    const fields = permissions.entities[entity].fields
-    
-    return Object.keys(fields).filter(fieldName => {
-      const fieldPerm = fields[fieldName]
-      if (accessType === 'write') {
-        return fieldPerm.write === true
-      }
-      return fieldPerm.read === true || fieldPerm.write === true
-    })
+    if (!permissions?.entities) return null
+    const key = resolvePermissionEntityKey(entity, permissions.entities)
+    const fields = permissions.entities[key]?.fields
+    // No field permissions configured for this entity → null means "show all" fallback
+    if (!fields || Object.keys(fields).length === 0) return null
+    return getAccessibleFieldKeys(fields, accessType)
   }, [permissions, entity, accessType])
+}
+
+/** Get accessible field names (camelCase) for an entity so list and forms stay in sync with backend keys (camel or snake_case). */
+function getAccessibleFieldKeys(
+  fields: Record<string, { read?: boolean; write?: boolean }> | undefined,
+  accessType: 'read' | 'write'
+): string[] {
+  if (!fields || typeof fields !== 'object') return []
+  const keys: string[] = []
+  for (const key of Object.keys(fields)) {
+    const perm = fields[key]
+    const can = accessType === 'write' ? perm?.write === true : (perm?.read === true || perm?.write === true)
+    if (can) keys.push(toCamelCaseField(key))
+  }
+  return [...new Set(keys)]
 }
 
 /**
@@ -259,13 +226,35 @@ export function toCamelCaseField(str: string): string {
   return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 }
 
+/** Convert camelCase to snake_case so we can look up backend keys (e.g. primaryContactName → primary_contact_name). */
+function toSnakeCaseField(str: string): string {
+  return str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+}
+
 /**
- * Whether to show a list column for a field given the list of readable field names.
- * If readableFields is empty, no fields have the given permission → returns false (hide column).
- * Otherwise returns true only if fieldKey is in readableFields (camelCase-normalized).
+ * Resolve field permission from store; backend may use snake_case keys while forms use camelCase.
+ * Tries fieldName then snake_case variant so list (normalized) and forms (camelCase) stay in sync.
+ * Exported for registry form renderer (canEdit per field without calling useCanEditField in a loop).
+ */
+export function getFieldPerms(
+  fields: Record<string, { read?: boolean; write?: boolean }> | undefined,
+  fieldName: string
+): { read?: boolean; write?: boolean } | undefined {
+  if (!fields || typeof fields !== 'object') return undefined
+  return fields[fieldName] ?? fields[toSnakeCaseField(fieldName)]
+}
+
+/**
+ * Whether to show a list column or view-page field given the readable field names from useAccessibleFields.
+ *
+ * - null  → no field permissions configured → return true (show all, same fallback as sf()/sr() in forms)
+ * - []    → field permissions configured but this role can read nothing → return false
+ * - [...] → return true only when fieldKey is in the accessible list (camelCase-normalised)
+ *
  * Usage: canShowColumn(readableFields, 'contactInfo') when building list columns.
  */
-export function canShowColumn(readableFields: string[], fieldKey: string): boolean {
+export function canShowColumn(readableFields: string[] | null, fieldKey: string): boolean {
+  if (readableFields === null) return true  // no field perms configured → show all
   if (readableFields.length === 0) return false
   const normalized = readableFields.map(toCamelCaseField)
   return normalized.includes(fieldKey) || readableFields.includes(fieldKey)
@@ -290,25 +279,57 @@ export function useIsFieldReadonly(entity: string, fieldName: string): boolean {
 }
 
 /**
+ * Check whether a named UI action is permitted for the current user.
+ * Maps action keys (e.g. 'UPLOAD_BOM') to backend entity+action and checks permissions.
+ * Roles are never hardcoded — the backend controls access via myPermissions.byRole.
+ *
+ * Usage:
+ *   const canUpload = useUIPermission('UPLOAD_BOM')
+ *   {canUpload && <Button>Upload BOM</Button>}
+ */
+export function useUIPermission(key: UIPermissionKey): boolean {
+  const { entity, action } = UI_PERMISSIONS[key]
+  return useCanAccess(entity, action)
+}
+
+/**
+ * Check multiple UI action permissions at once.
+ * Usage:
+ *   const { UPLOAD_BOM, EDIT_PROJECT } = useUIPermissions(['UPLOAD_BOM', 'EDIT_PROJECT'])
+ */
+export function useUIPermissions<K extends UIPermissionKey>(keys: K[]): Record<K, boolean> {
+  const permissions = usePermissions()
+  return useMemo(() => {
+    const result = {} as Record<K, boolean>
+    for (const key of keys) {
+      const { entity, action } = UI_PERMISSIONS[key]
+      if (!permissions?.entities) { result[key] = false; continue }
+      const resolvedKey = resolvePermissionEntityKey(entity, permissions.entities)
+      const entityPerms = permissions.entities[resolvedKey]
+      result[key] = entityPerms?.[action] === true
+    }
+    return result
+  }, [permissions, keys])
+}
+
+/**
  * Get all entity permissions as a usable object
  * Usage: const { canCreate, canList, canUpdate, canDelete } = useEntityActions('user')
  */
 export function useEntityActions(entity: string) {
   const permissions = usePermissions()
-  
   return useMemo(() => {
-    if (!permissions?.entities?.[entity]) {
-      return {
-        canCreate: false,
-        canRead: false,
-        canUpdate: false,
-        canDelete: false,
-        canList: false,
-      }
+    const none = {
+      canCreate: false,
+      canRead: false,
+      canUpdate: false,
+      canDelete: false,
+      canList: false,
     }
-
-    const entityPerms = permissions.entities[entity]
-    
+    if (!permissions?.entities) return none
+    const key = resolvePermissionEntityKey(entity, permissions.entities)
+    const entityPerms = permissions.entities[key]
+    if (!entityPerms) return none
     return {
       canCreate: entityPerms.create === true,
       canRead: entityPerms.read === true,

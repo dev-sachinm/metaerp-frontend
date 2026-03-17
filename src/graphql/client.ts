@@ -143,11 +143,8 @@ export async function executeGraphQL<TData = any, TVariables = any>(
       throw error;
     }
 
-    // Other user-facing errors (skip toasting "not found" to avoid noise)
-    if (!errorMessage.includes('not found')) {
-      toast.error(errorMessage);
-    }
-
+    // Do not toast here for other errors (e.g. validation like "Customer code must be unique").
+    // Callers (mutation onError, form catch) handle toasting so we avoid duplicate toasts.
     throw error;
   }
 }

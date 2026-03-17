@@ -91,10 +91,11 @@ export function EditUser() {
   })
 
   const user = data?.user
+  const { reset } = form
 
   useEffect(() => {
     if (user) {
-      form.reset({
+      reset({
         firstName: user.firstName ?? '',
         lastName: user.lastName ?? '',
         dateOfBirth: user.dateOfBirth ?? '',
@@ -103,7 +104,7 @@ export function EditUser() {
         isActive: user.isActive ?? true,
       })
     }
-  }, [user, form])
+  }, [user, reset])
 
   const onSubmit = async (data: EditUserFormData) => {
     setFormError(null)

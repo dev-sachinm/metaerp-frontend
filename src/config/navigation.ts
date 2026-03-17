@@ -12,7 +12,7 @@ export interface NavItemConfig {
   path: string
   label: string
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project'
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -43,6 +43,13 @@ export const NAV_ITEMS: NavItemConfig[] = [
     label: 'Master Data',
     icon: 'master',
   },
+  {
+    moduleId: 'project_management',
+    entity: 'project',
+    path: '/projects',
+    label: 'Projects',
+    icon: 'project',
+  },
 ]
 
 /** Module IDs that own routes; use with RequireModule */
@@ -65,6 +72,8 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/master/expense-categories': 'master_data',
   '/master/suppliers': 'master_data',
   '/master/vendors': 'master_data',
+  '/projects': 'project_management',
+  '/projects/:id/assignment': 'project_management',
 }
 
 /** Resolve which module guards a path (first segment match) */
@@ -74,5 +83,6 @@ export function getModuleIdForPath(pathname: string): string | null {
   if (normalized.startsWith('/users')) return 'core'
   if (normalized.startsWith('/roles')) return 'core'
   if (normalized.startsWith('/master')) return 'master_data'
+  if (normalized.startsWith('/projects')) return 'project_management'
   return null
 }

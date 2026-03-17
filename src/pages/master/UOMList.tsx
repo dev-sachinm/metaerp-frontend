@@ -11,7 +11,7 @@ const ENTITY = 'uom'
 
 export function UOMList() {
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, error, refetch } = useUOMList(page * PAGE_SIZE, PAGE_SIZE, undefined)
+  const { data, isLoading, isError, error, refetch } = useUOMList(page * PAGE_SIZE, PAGE_SIZE)
   const deleteUom = useDeleteUOM()
   const readableFields = useAccessibleFields(ENTITY, 'read')
 
@@ -41,6 +41,12 @@ export function UOMList() {
         ),
       })
     }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: UOM) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: UOM) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
+    }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: UOM) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
     }
@@ -49,6 +55,9 @@ export function UOMList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: UOM) =>
+    `${r.code ?? ''} ${r.name ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<UOM>
@@ -60,6 +69,9 @@ export function UOMList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code or name…"
+      getSearchText={getSearchText}
       getEditHref={(r) => `/master/uom/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteUom.isPending}

@@ -42,6 +42,12 @@ export function PaymentTermsList() {
         ),
       })
     }
+    if (canShowColumn(readableFields, 'createdBy')) {
+      cols.push({ header: 'Created By', cell: (r: PaymentTerm) => r.createdByUsername ?? r.createdBy ?? '—' })
+    }
+    if (canShowColumn(readableFields, 'modifiedBy')) {
+      cols.push({ header: 'Modified By', cell: (r: PaymentTerm) => r.modifiedByUsername ?? r.modifiedBy ?? '—' })
+    }
     if (canShowColumn(readableFields, 'createdAt')) {
       cols.push({ header: 'Created At', cell: (r: PaymentTerm) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') })
     }
@@ -50,6 +56,9 @@ export function PaymentTermsList() {
     }
     return cols
   }, [readableFields])
+
+  const getSearchText = (r: PaymentTerm) =>
+    `${r.code ?? ''} ${r.name ?? ''}`.toLowerCase()
 
   return (
     <MasterDataListPage<PaymentTerm>
@@ -61,6 +70,9 @@ export function PaymentTermsList() {
       total={total}
       items={items}
       columns={columns}
+      enableSearch
+      searchPlaceholder="Search by code or name…"
+      getSearchText={getSearchText}
       getEditHref={(r) => `/master/payment-terms/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deletePt.isPending}
