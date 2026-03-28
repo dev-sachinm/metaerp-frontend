@@ -96,6 +96,11 @@ const NAV_ICONS: Record<NonNullable<NavItemConfig['icon']>, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
     </svg>
   ),
+  audit: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>
+  ),
 }
 
 interface SidebarProps {
@@ -129,6 +134,9 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
         const key = resolvePermissionEntityKey(item.entity, permissions.entities)
         const entityPerms = permissions.entities[key]
         if (!entityPerms) return false
+        // If a specific action is required, check only that action
+        if (item.requiredAction) return entityPerms[item.requiredAction] === true
+        // Otherwise any permission is sufficient
         return (
           entityPerms.create === true ||
           entityPerms.read === true ||

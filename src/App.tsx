@@ -48,6 +48,7 @@ import { ProjectAssignmentPage } from './pages/projects/ProjectAssignmentPage'
 import { ViewProject } from './pages/projects/ViewProject'
 import { EditProject } from './pages/projects/EditProject'
 import { EmailsList } from './pages/email/EmailsList'
+import { AuditLogsList } from './pages/audit/AuditLogsList'
 import { ViewEmail } from './pages/email/ViewEmail'
 
 // Hooks
@@ -393,6 +394,25 @@ function AppContent() {
         }
       />
 
+      {/* Audit Logs (core, permission guarded on audit_log.read) */}
+      <Route
+        path="/audit-logs"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="audit_log" action="delete">
+                <AuditLogsList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
       {/* Emails (core, permission guarded on email.read) */}
       <Route
         path="/emails"

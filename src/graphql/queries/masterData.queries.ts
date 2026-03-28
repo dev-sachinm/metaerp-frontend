@@ -3,13 +3,13 @@
  * Require module master_data enabled. Aligned with BACKEND_IMPLEMENTATION_STATE.md
  */
 
-const LIST_FIELDS = 'id total skip limit page totalPages hasMore'
+const LIST_FIELDS = 'total page totalPages hasMore firstPage lastPage'
 
 export const PRODUCT_CATEGORIES = `
-  query ProductCategories($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    productCategories(skip: $skip, limit: $limit, isActive: $isActive) {
+  query ProductCategories($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $parentId: String) {
+    productCategories(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, parentId: $parentId) {
       items { id categoryName parentId parentName isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -24,10 +24,10 @@ export const PRODUCT_CATEGORY = `
 
 /** Customers list (aligned with BACKEND_IMPLEMENTATION_STATE.md §16) */
 export const CUSTOMERS = `
-  query Customers($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    customers(skip: $skip, limit: $limit, isActive: $isActive) {
+  query Customers($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $contactNameContains: String, $emailContains: String) {
+    customers(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, contactNameContains: $contactNameContains, emailContains: $emailContains) {
       items { id name code address contactInfo primaryContactName primaryContactEmail primaryContactMobile secondaryContactName secondaryContactEmail secondaryContactMobile isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -42,10 +42,10 @@ export const CUSTOMER = `
 `
 
 export const UOM_LIST = `
-  query UOMList($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    uomList(skip: $skip, limit: $limit, isActive: $isActive) {
+  query UOMList($page: Int, $pageSize: Int, $isActive: Boolean, $searchContains: String) {
+    uomList(page: $page, pageSize: $pageSize, isActive: $isActive, searchContains: $searchContains) {
       items { id code name isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -59,10 +59,10 @@ export const UOM = `
 `
 
 export const TAX_LIST = `
-  query TaxList($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    taxList(skip: $skip, limit: $limit, isActive: $isActive) {
+  query TaxList($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $rateMin: Float, $rateMax: Float) {
+    taxList(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, rateMin: $rateMin, rateMax: $rateMax) {
       items { id name code ratePercent isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -76,10 +76,10 @@ export const TAX = `
 `
 
 export const PAYMENT_TERMS_LIST = `
-  query PaymentTermsList($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    paymentTermsList(skip: $skip, limit: $limit, isActive: $isActive) {
+  query PaymentTermsList($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $daysMin: Int, $daysMax: Int) {
+    paymentTermsList(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, daysMin: $daysMin, daysMax: $daysMax) {
       items { id name code days isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -93,10 +93,10 @@ export const PAYMENT_TERM = `
 `
 
 export const EXPENSE_CATEGORIES_LIST = `
-  query ExpenseCategoriesList($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    expenseCategoriesList(skip: $skip, limit: $limit, isActive: $isActive) {
+  query ExpenseCategoriesList($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $parentId: String) {
+    expenseCategoriesList(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, parentId: $parentId) {
       items { id name parentId parentName code isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -110,10 +110,10 @@ export const EXPENSE_CATEGORY = `
 `
 
 export const SUPPLIERS = `
-  query Suppliers($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    suppliers(skip: $skip, limit: $limit, isActive: $isActive) {
+  query Suppliers($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $contactPersonContains: String, $emailContains: String) {
+    suppliers(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, contactPersonContains: $contactPersonContains, emailContains: $emailContains) {
       items { id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -127,10 +127,10 @@ export const SUPPLIER = `
 `
 
 export const VENDORS = `
-  query Vendors($skip: Int!, $limit: Int!, $isActive: Boolean) {
-    vendors(skip: $skip, limit: $limit, isActive: $isActive) {
+  query Vendors($page: Int, $pageSize: Int, $isActive: Boolean, $nameContains: String, $codeContains: String, $contactPersonContains: String, $emailContains: String) {
+    vendors(page: $page, pageSize: $pageSize, isActive: $isActive, nameContains: $nameContains, codeContains: $codeContains, contactPersonContains: $contactPersonContains, emailContains: $emailContains) {
       items { id name code contactPerson email phone address isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
-      ${LIST_FIELDS}
+      total page totalPages hasMore firstPage lastPage
     }
   }
 `
@@ -145,8 +145,8 @@ export const VENDOR = `
 
 export const PRODUCTS = `
   query Products(
-    $skip: Int!
-    $limit: Int!
+    $page: Int
+    $pageSize: Int
     $categoryId: String
     $isActive: Boolean
     $itemCodeContains: String
@@ -158,8 +158,8 @@ export const PRODUCTS = `
     $locationInStoreContains: String
   ) {
     products(
-      skip: $skip
-      limit: $limit
+      page: $page
+      pageSize: $pageSize
       categoryId: $categoryId
       isActive: $isActive
       itemCodeContains: $itemCodeContains

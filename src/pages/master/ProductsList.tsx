@@ -7,25 +7,33 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { Input } from '@/components/ui/input'
 import type { Product } from '@/types/masterData'
 import { Badge } from '@/components/ui/badge'
+import { Search, X } from 'lucide-react'
 
-const PAGE_SIZE = 20
 const ENTITY = 'product'
 
 export function ProductsList() {
-  const [page, setPage] = useState(0)
-  const [search, setSearch] = useState('')
-  const debouncedSearch = useDebounce(search, 350)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [searchName, setSearchName]   = useState('')
+  const [searchCode, setSearchCode]   = useState('')
+  const [searchMake, setSearchMake]   = useState('')
+  const [searchDesc, setSearchDesc]   = useState('')
+  const debouncedName = useDebounce(searchName, 350)
+  const debouncedCode = useDebounce(searchCode, 350)
+  const debouncedMake = useDebounce(searchMake, 350)
+  const debouncedDesc = useDebounce(searchDesc, 350)
 
-  // Reset to first page whenever the search term changes
-  const handleSearchChange = (value: string) => {
-    setSearch(value)
-    setPage(0)
+  const resetPage = () => setPage(1)
+  const hasFilters = searchName || searchCode || searchMake || searchDesc
+  const clearAll = () => {
+    setSearchName(''); setSearchCode(''); setSearchMake(''); setSearchDesc(''); setPage(1)
   }
 
-  const { data, isLoading, isError, error, refetch } = useProducts(page * PAGE_SIZE, PAGE_SIZE, {
-    // Single debounced term sent to both itemCode and name filters for broad match
-    itemCodeContains: debouncedSearch || undefined,
-    nameContains: debouncedSearch || undefined,
+  const { data, isLoading, isError, error, refetch } = useProducts(page, pageSize, {
+    nameContains:        debouncedName || undefined,
+    itemCodeContains:    debouncedCode || undefined,
+    makeContains:        debouncedMake || undefined,
+    descriptionContains: debouncedDesc || undefined,
   })
   const deleteProduct = useDeleteProduct()
   const readableFields = useAccessibleFields(ENTITY, 'read')
@@ -33,7 +41,10 @@ export function ProductsList() {
   const list = data?.products
   const items = list?.items ?? []
   const total = list?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = list?.totalPages ?? 1
+  const hasMore = list?.hasMore ?? false
+  const firstPage = list?.firstPage ?? 1
+  const lastPage = list?.lastPage ?? 1
 
   const handleDelete = useCallback(
     (row: Product) => {
@@ -90,25 +101,69 @@ export function ProductsList() {
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-3">
-        <Input
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search by item code, name, description…"
-          className="h-8 w-72"
-        />
-        {debouncedSearch && (
-          <button
-            type="button"
-            className="text-xs text-slate-500 hover:text-slate-800 underline"
-            onClick={() => handleSearchChange('')}
-          >
-            Clear
-          </button>
-        )}
-        {isLoading && debouncedSearch && (
-          <span className="text-xs text-slate-400">Searching…</span>
-        )}
+      <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 mb-3 flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Item Code</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input
+              value={searchCode}
+              onChange={(e) => { setSearchCode(e.target.value); resetPage() }}
+              placeholder="e.g. SRBOP001657"
+              className="h-8 w-44 pl-6 text-xs"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Name</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input
+              value={searchName}
+              onChange={(e) => { setSearchName(e.target.value); resetPage() }}
+              placeholder="e.g. TRANSFORMER"
+              className="h-8 w-48 pl-6 text-xs"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Make</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input
+              value={searchMake}
+              onChange={(e) => { setSearchMake(e.target.value); resetPage() }}
+              placeholder="e.g. Siemens"
+              className="h-8 w-36 pl-6 text-xs"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Description</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input
+              value={searchDesc}
+              onChange={(e) => { setSearchDesc(e.target.value); resetPage() }}
+              placeholder="keyword…"
+              className="h-8 w-44 pl-6 text-xs"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pb-0.5">
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:border-red-300 transition-colors"
+            >
+              <X className="h-3 w-3" /> Clear filters
+            </button>
+          )}
+          {isLoading && hasFilters && (
+            <span className="text-xs text-slate-400 italic">Searching…</span>
+          )}
+        </div>
       </div>
     <MasterDataListPage<Product>
       title="Products"
@@ -123,9 +178,13 @@ export function ProductsList() {
       onDelete={handleDelete}
       deletePending={deleteProduct.isPending}
       page={page}
-      pageSize={PAGE_SIZE}
+      pageSize={pageSize}
       totalPages={totalPages}
+      hasMore={hasMore}
+      firstPage={firstPage}
+      lastPage={lastPage}
       onPageChange={setPage}
+      onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
       isError={isError}
       error={error}
       onRetry={() => refetch()}

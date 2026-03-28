@@ -12,6 +12,7 @@
 9. [Frontend Integration Examples](#frontend-integration-examples)
 10. [Error Handling](#error-handling)
 11. [Best Practices](#best-practices)
+12. [Audit Trail](#audit-trail)
 
 ---
 
@@ -25,7 +26,7 @@
 - ✅ Role-based access control (RBAC)
 - ✅ Entity-level permissions (Create, Read, Update, Delete)
 - ✅ Field-level permissions (control which fields can be read/written)
-- ✅ Pagination support (up to 1000 items per page)
+- ✅ Pagination (varies by query: e.g. `users` uses `skip`/`limit`; **Master Data** list queries use `page` / `pageSize` with `pageSize` capped at **200**)
 - ✅ Permission caching with Redis
 - ✅ Auto-discovery schema (no manual sync needed)
 
@@ -229,9 +230,22 @@ Login is by **username** (not email). Users are seeded by default:
 
 ## GraphQL API
 
+### Keeping this document in sync with GraphQL changes
+
+Introspection helps tools discover types, but **`BACKEND_IMPLEMENTATION_STATE.md` is the project contract** for UI and integrations. Whenever you change **any** GraphQL query, mutation, argument, default, or return shape:
+
+1. **Update the tables** in this file for that query/mutation (full argument list and description).
+2. **Search and filter parameters:** If you add, rename, or remove optional search/filter args on a list or view, update:
+   - the row in the main **GraphQL Query and Mutation Reference → Queries** table, and  
+   - the **Master Data list search parameters (quick reference)** subsection (immediately below the Master Data query table).
+3. **Examples:** Refresh any inline GraphQL examples that still show old signatures (for example `skip`/`limit` vs `page`/`pageSize`).
+4. **Summary:** Adjust the closing **Summary** bullets if the high-level API contract changes.
+
+Skipping doc updates causes frontend and tests to drift from the real schema; treat doc updates as part of the same change as the code.
+
 ### Schema Introspection
 
-GraphQL provides **automatic schema discovery**. No manual documentation sync needed!
+GraphQL provides **automatic schema discovery**. Use introspection alongside this document, not instead of updating it when the API changes.
 
 **In GraphQL Playground:**
 1. Click **< Docs** button (bottom right)
@@ -474,31 +488,48 @@ All operations exposed by the schema:
 
 | Query | Arguments | Returns | Description |
 |-------|-----------|---------|-------------|
-| `productCategories` | `skip: Int = 0`, `limit: Int = 500`, `isActive: Boolean` (optional) | `ProductCategoryListType!` | Paginated product categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Item fields include `parentId` and `parentName`. |
+| `productCategories` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `parentId: String` | `ProductCategoryListType!` | Page-based product categories. `nameContains` = case-insensitive name search. `parentId` = filter by parent category. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `productCategory` | `id: String!` | `ProductCategoryType` | Single product category by id. Includes `parentId` and `parentName`. `null` if not found. |
-| `customers` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `CustomerListType!` | Paginated customers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `customers` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `contactNameContains: String`, `emailContains: String` | `CustomerListType!` | Page-based customers. `contactNameContains` searches both primary and secondary contact names. `emailContains` searches both primary and secondary emails. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `customer` | `id: String!` | `CustomerType` | Single customer by id. `null` if not found. |
-| `uomList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `UOMListType!` | Paginated UOMs (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `uomList` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `searchContains: String` | `UOMListType!` | Page-based UOMs. `searchContains` matches against both `code` and `name` (OR). Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `uom` | `id: String!` | `UOMType` | Single UOM by id. `null` if not found. |
-| `taxList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `TaxListType!` | Paginated taxes (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `taxList` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `rateMin: Float`, `rateMax: Float` | `TaxListType!` | Page-based taxes. `rateMin`/`rateMax` filter by `rate_percent` range (inclusive). Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `tax` | `id: String!` | `TaxType` | Single tax by id. `null` if not found. |
-| `paymentTermsList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `PaymentTermListType!` | Paginated payment terms (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `paymentTermsList` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `daysMin: Int`, `daysMax: Int` | `PaymentTermListType!` | Page-based payment terms. `daysMin`/`daysMax` filter by number of days (inclusive). Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `paymentTerm` | `id: String!` | `PaymentTermType` | Single payment term by id. `null` if not found. |
-| `expenseCategoriesList` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `ExpenseCategoryListType!` | Paginated expense categories (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Item fields include `parentId` and `parentName`. |
+| `expenseCategoriesList` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `parentId: String` | `ExpenseCategoryListType!` | Page-based expense categories. `parentId` filters to sub-categories of a given parent. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `expenseCategory` | `id: String!` | `ExpenseCategoryType` | Single expense category by id. Includes `parentId` and `parentName`. `null` if not found. |
-| `suppliers` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `SupplierListType!` | Paginated suppliers (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `suppliers` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `contactPersonContains: String`, `emailContains: String` | `SupplierListType!` | Page-based suppliers. All text filters are case-insensitive. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `supplier` | `id: String!` | `SupplierType` | Single supplier by id. `null` if not found. |
-| `vendors` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `VendorListType!` | Paginated vendors (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `vendors` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `nameContains: String`, `codeContains: String`, `contactPersonContains: String`, `emailContains: String` | `VendorListType!` | Page-based vendors. All text filters are case-insensitive. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `vendor` | `id: String!` | `VendorType` | Single vendor by id. `null` if not found. |
-| `products` | `skip: Int = 0`, `limit: Int = 100`, `categoryId: String`, `isActive: Boolean`, `itemCodeContains: String`, `nameContains: String`, `descriptionContains: String`, `makeContains: String`, `puUnitId: String`, `stkUnitId: String`, `locationInStoreContains: String` (all optional) | `ProductListType!` | Paginated products. Text filters (`itemCodeContains`, `nameContains`, `descriptionContains`, `makeContains`, `locationInStoreContains`) are case-insensitive "contains" matches. `puUnitId` / `stkUnitId` filter by exact UOM id. |
+| `products` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `categoryId: String`, `itemCodeContains: String`, `nameContains: String`, `descriptionContains: String`, `makeContains: String`, `puUnitId: String`, `stkUnitId: String`, `locationInStoreContains: String` | `ProductListType!` | Page-based products. All text filters are case-insensitive "contains". `puUnitId`/`stkUnitId` = exact UOM id match. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `product` | `id: String!` | `ProductType` | Single product by id. Includes `itemCode`, `name`, `description`, `make`, `puUnitId`, `stkUnitId`, `procMtd`, `locationInStore`, `quantity`, `isActive`. `null` if not found. |
 | `purchaseOrders` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `PurchaseOrderListType!` | Paginated purchase orders (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. Includes `poNumber`, `title`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments`, `poSendDate`, `poStatus`, and audit fields. |
+| `auditLogs` | `page: Int = 1`, `pageSize: Int = 20`, `userId: String`, `userNameContains: String`, `action: String`, `entityName: String`, `entityId: String`, `fieldName: String`, `oldValueContains: String`, `newValueContains: String`, `fromDate: String`, `toDate: String` | `AuditLogListType!` | Paginated audit trail. Returns field-level change history. Permission: `audit_log.read`. See [Audit Trail](#audit-trail) section. |
 
 `isActive` behavior for all Master Data list queries:
 - `isActive: true` → only active records
 - `isActive: false` → only inactive records
 - omit `isActive` (or pass `null`) → both active and inactive records
+
+#### Master Data list search parameters (quick reference)
+
+All arguments below are optional unless noted. Omit them or pass `null` to apply no filter. Unless stated otherwise, `*Contains` arguments are **case-insensitive substring** (`ILIKE`) matches on the server.
+
+| Query | Pagination + status | Search / filter arguments |
+|-------|---------------------|---------------------------|
+| `productCategories` | `page`, `pageSize`, `isActive` | `nameContains`, `parentId` (exact parent category id) |
+| `customers` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `contactNameContains` (primary **or** secondary contact name), `emailContains` (primary **or** secondary email) |
+| `uomList` | `page`, `pageSize`, `isActive` | `searchContains` (matches **code OR name**) |
+| `taxList` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `rateMin`, `rateMax` (inclusive range on `rate_percent`) |
+| `paymentTermsList` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `daysMin`, `daysMax` (inclusive range on `days`) |
+| `expenseCategoriesList` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `parentId` (exact parent id) |
+| `suppliers` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `contactPersonContains`, `emailContains` |
+| `vendors` | `page`, `pageSize`, `isActive` | `nameContains`, `codeContains`, `contactPersonContains`, `emailContains` |
+| `products` | `page`, `pageSize`, `isActive` | `categoryId` (exact), `itemCodeContains`, `nameContains`, `descriptionContains`, `makeContains`, `puUnitId`, `stkUnitId` (exact UOM ids), `locationInStoreContains` |
 
 **Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
 
@@ -712,11 +743,17 @@ query {
 }
 
 # ----- Master Data (require master_data module enabled) -----
-# 14. Product categories list
+# 14. Product categories list (page-based pagination)
+# Optional: `nameContains`, `parentId` (exact parent category id)
 query {
-  productCategories(skip: 0, limit: 100, isActive: true) {
+  productCategories(page: 1, pageSize: 50, isActive: true, nameContains: "Raw") {
     items { id categoryName parentId parentName isActive }
     total
+    page
+    totalPages
+    hasMore
+    firstPage
+    lastPage
   }
 }
 
@@ -727,9 +764,17 @@ query {
   }
 }
 
-# 16. Customers list (with audit fields and creator/modifier usernames)
+# 16. Customers list — page-based pagination + optional search (with audit fields)
 query {
-  customers(skip: 0, limit: 50, isActive: true) {
+  customers(
+    page: 1
+    pageSize: 50
+    isActive: true
+    nameContains: "Acme"
+    codeContains: null
+    contactNameContains: null
+    emailContains: null
+  ) {
     items {
       id name code address contactInfo
       primaryContactName primaryContactEmail primaryContactMobile
@@ -737,6 +782,11 @@ query {
       isActive createdAt modifiedAt createdBy createdByUsername modifiedBy modifiedByUsername
     }
     total
+    page
+    totalPages
+    hasMore
+    firstPage
+    lastPage
   }
 }
 
@@ -755,8 +805,8 @@ query GetCustomer($id: String!) {
 # Text filters: case-insensitive "contains" match
 # puUnitId / stkUnitId: exact UOM id match
 query ListProducts(
-  $skip: Int
-  $limit: Int
+  $page: Int
+  $pageSize: Int
   $categoryId: String
   $isActive: Boolean
   $itemCodeContains: String
@@ -768,8 +818,8 @@ query ListProducts(
   $locationInStoreContains: String
 ) {
   products(
-    skip: $skip
-    limit: $limit
+    page: $page
+    pageSize: $pageSize
     categoryId: $categoryId
     isActive: $isActive
     itemCodeContains: $itemCodeContains
@@ -785,17 +835,17 @@ query ListProducts(
       puUnitId stkUnitId puUnitName stkUnitName
       procMtd locationInStore quantity isActive categoryId
     }
-    total skip limit page totalPages hasMore
+    total skip limit page totalPages hasMore firstPage lastPage
   }
 }
 # Example — find all auto-created SRBOP products:
-# { "itemCodeContains": "SRBOP", "isActive": true }
+# { "page": 1, "pageSize": 50, "itemCodeContains": "SRBOP", "isActive": true }
 #
 # Example — find by make:
-# { "makeContains": "SMC" }
+# { "page": 1, "pageSize": 20, "makeContains": "SMC" }
 #
 # Example — find by stock unit:
-# { "stkUnitId": "UOM_UUID" }
+# { "page": 1, "pageSize": 100, "stkUnitId": "UOM_UUID" }
 
 # ----- Project Management & Design/BOM (require project_management module enabled) -----
 # 18. Projects list
@@ -3382,7 +3432,8 @@ Then update your Authorization header.
 ✅ **GraphQL-Only Backend**
 - Single endpoint: `/graphql`
 - Full introspection support
-- Pagination up to 1000 items per page (list queries); Master Data list limits vary (e.g. products 100, productCategories 500).
+- All Master Data list queries use `page` (1-indexed, default 1) and `pageSize` (default 20, max 200). Responses include `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`, `skip`, and `limit`.
+- Optional **search/filter** arguments for those lists are in the Master Data rows above and in **[Master Data list search parameters (quick reference)](#master-data-list-search-parameters-quick-reference)**. When you change search parameters in code, update that subsection, the main query table row, and any examples ([keeping this document in sync](#keeping-this-document-in-sync-with-graphql-changes)).
 
 ✅ **Queries (single source of truth: this document)**
 
@@ -3418,3 +3469,217 @@ Then update your Authorization header.
 - Pagination implementations
 
 **Start building with GraphQL!** 🚀
+
+---
+
+## Audit Trail
+
+### Overview
+
+Every `CREATE`, `UPDATE`, `DELETE`, `LOGIN`, `EXPORT`, and `UPLOAD` action is recorded in the `audit_logs` table. The system is:
+- **Append-only** — entries are never soft-deleted or modified.
+- **Atomic** — the log entry is written in the same DB transaction as the data change, so there is no data-without-audit state.
+- **Field-level** — the `changes` JSONB column stores `{field: [old_value, new_value]}` pairs, allowing fine-grained search.
+
+### Database model
+
+```
+audit_logs
+  id           VARCHAR(36)   PK
+  timestamp    DATETIME      NOT NULL  indexed
+  user_id      VARCHAR(36)   nullable  indexed  (null = system action)
+  user_name    VARCHAR(100)  nullable
+  action       VARCHAR(20)   NOT NULL  indexed  (CREATE|UPDATE|DELETE|LOGIN|EXPORT|UPLOAD|CONFIG|PERMISSION_CHANGE)
+  entity_name  VARCHAR(100)  NOT NULL  indexed  (e.g. "customer", "purchase_order", "fixture")
+  entity_id    VARCHAR(36)   nullable  indexed
+  entity_label VARCHAR(255)  nullable
+  changes      JSONB         nullable  (GIN index for field-level search)
+  ip_address   VARCHAR(45)   nullable
+```
+
+Alembic migration: **041** (`alembic/versions/20240101_000041_add_audit_logs.py`)
+
+### What is logged
+
+| Entity / area            | Actions logged                     |
+|--------------------------|-------------------------------------|
+| ProductCategory          | CREATE, UPDATE, DELETE              |
+| Customer                 | CREATE, UPDATE, DELETE              |
+| UOM                      | CREATE, UPDATE, DELETE              |
+| Tax                      | CREATE, UPDATE, DELETE              |
+| PaymentTerm              | CREATE, UPDATE, DELETE              |
+| ExpenseCategory          | CREATE, UPDATE, DELETE              |
+| Supplier                 | CREATE, UPDATE, DELETE              |
+| Vendor                   | CREATE, UPDATE, DELETE              |
+| Product                  | CREATE, UPDATE, DELETE              |
+| PurchaseOrder            | CREATE, UPDATE, DELETE              |
+| Fixture                  | CREATE, UPDATE, BOM UPLOAD (UPLOAD), PO EXPORT (EXPORT) |
+| User (login)             | LOGIN                               |
+| Role / Permissions       | CREATE, UPDATE, DELETE, PERMISSION_CHANGE |
+
+### GraphQL query: `auditLogs`
+
+**Permission required:** `audit_log.read`
+
+```graphql
+query GetAuditLogs(
+  $page: Int
+  $pageSize: Int
+  $userId: String
+  $userNameContains: String
+  $action: String
+  $entityName: String
+  $entityId: String
+  $fieldName: String
+  $oldValueContains: String
+  $newValueContains: String
+  $fromDate: String
+  $toDate: String
+) {
+  auditLogs(
+    page: $page
+    pageSize: $pageSize
+    userId: $userId
+    userNameContains: $userNameContains
+    action: $action
+    entityName: $entityName
+    entityId: $entityId
+    fieldName: $fieldName
+    oldValueContains: $oldValueContains
+    newValueContains: $newValueContains
+    fromDate: $fromDate
+    toDate: $toDate
+  ) {
+    total
+    page
+    totalPages
+    hasMore
+    firstPage
+    lastPage
+    items {
+      id
+      timestamp
+      userId
+      userName
+      action
+      entityName
+      entityId
+      entityLabel
+      ipAddress
+      changes {
+        field
+        oldValue
+        newValue
+      }
+    }
+  }
+}
+```
+
+**Response types:**
+
+| Type              | Fields                                                                                             |
+|-------------------|----------------------------------------------------------------------------------------------------|
+| `AuditLogListType` | `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`                        |
+| `AuditLogType`    | `id`, `timestamp`, `userId`, `userName`, `action`, `entityName`, `entityId`, `entityLabel`, `ipAddress`, `changes` |
+| `AuditChangeType` | `field`, `oldValue`, `newValue`                                                                    |
+
+**Filter parameters:**
+
+| Parameter          | Type   | Description                                                            |
+|--------------------|--------|------------------------------------------------------------------------|
+| `page`             | Int    | Page number (default 1)                                                |
+| `pageSize`         | Int    | Items per page (default 20)                                            |
+| `userId`           | String | Exact user ID                                                          |
+| `userNameContains` | String | Case-insensitive substring on `user_name`                              |
+| `action`           | String | Exact action (CREATE, UPDATE, DELETE, LOGIN, EXPORT, UPLOAD, ...)      |
+| `entityName`       | String | Exact entity name (e.g. "customer", "fixture")                         |
+| `entityId`         | String | Exact entity primary key                                               |
+| `fieldName`        | String | Checks if `changes` JSONB contains this key (e.g. "name")             |
+| `oldValueContains` | String | Case-insensitive substring match within old values in the changes JSON |
+| `newValueContains` | String | Case-insensitive substring match within new values in the changes JSON |
+| `fromDate`         | String | ISO 8601 datetime: `2026-01-01` or `2026-01-01T00:00:00`              |
+| `toDate`           | String | ISO 8601 datetime: `2026-12-31` or `2026-12-31T23:59:59`              |
+
+### Example use-cases
+
+**User timeline (last 20 actions by a specific user):**
+```graphql
+auditLogs(userId: "abc-123", page: 1, pageSize: 20) { ... }
+```
+
+**Admin search — who changed customer name last month:**
+```graphql
+auditLogs(entityName: "customer", fieldName: "name", fromDate: "2026-03-01", toDate: "2026-03-31") { ... }
+```
+
+**Find all logins:**
+```graphql
+auditLogs(action: "LOGIN", fromDate: "2026-03-28") { ... }
+```
+
+**Find what was changed to "ACME Corp":**
+```graphql
+auditLogs(newValueContains: "ACME Corp") { ... }
+```
+
+### UI integration notes
+
+#### Three usage modes
+
+| Mode | How to call | When to use |
+|---|---|---|
+| **Admin search screen** | Full filter set, user controls all params | Dedicated "Audit Logs" admin menu item |
+| **User timeline widget** | Hardcode `userId: currentUser.id`, no search bar | Dashboard / user profile drawer |
+| **Entity detail view** | Hardcode `entityName` + `entityId`, no search bar | Customer / PO / Fixture detail page — shows that record's history only |
+
+#### Dropdown filter values
+
+`action` — send uppercase exact values:
+
+```
+CREATE  UPDATE  DELETE  LOGIN  UPLOAD  EXPORT  PERMISSION_CHANGE
+```
+
+`entityName` — send lowercase snake_case exact values:
+
+```
+customer  product  product_category  uom  tax  payment_term
+expense_category  supplier  vendor  purchase_order  fixture  role  user
+```
+
+#### Pagination
+
+Same pattern as all master data list APIs — use `firstPage` / `lastPage` / `totalPages` / `hasMore` from the response:
+
+- Disable **Prev / First** when `page === firstPage`
+- Disable **Next / Last** when `!hasMore` or `page === lastPage`
+- Reset `page` to `1` whenever any filter changes
+- Recommended page-size options: `10 / 20 / 50 / 100` (backend caps at 200)
+- Results are always ordered **newest first** (`timestamp DESC`) — no client-side sort needed
+
+#### Rendering changes
+
+Each item has a `changes` array of `{ field, oldValue, newValue }`. Display rules:
+
+| Condition | Display |
+|---|---|
+| `oldValue` is `null` | `{field}: created as "{newValue}"` |
+| `newValue` is `null` | `{field}: deleted (was "{oldValue}")` |
+| both present | `{field}: "{oldValue}" → "{newValue}"` |
+
+#### Action badge colours (suggested)
+
+| Action | Colour |
+|---|---|
+| `CREATE` | green |
+| `UPDATE` | blue |
+| `DELETE` | red |
+| `LOGIN` | grey |
+| `UPLOAD` | orange |
+| `EXPORT` | purple |
+| `PERMISSION_CHANGE` | yellow |
+
+#### Permission guard
+
+The `auditLogs` query requires the `audit_log.read` permission. Hide the admin menu item and guard the route using the same permission-check pattern used for other protected entities. The user timeline widget (scoped to `userId: currentUser.id`) does not need a separate permission guard at the UI level — the backend enforces it.

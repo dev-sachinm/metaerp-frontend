@@ -41,45 +41,57 @@ import type {
 const stale = 5 * 60 * 1000
 const gc = 30 * 60 * 1000
 
+
+// ── Per-entity filter interfaces ─────────────────────────────────────────────
+export interface ProductCategoryFilters { nameContains?: string; parentId?: string; isActive?: boolean }
+export interface CustomerFilters { nameContains?: string; codeContains?: string; contactNameContains?: string; emailContains?: string; isActive?: boolean }
+export interface UOMFilters { searchContains?: string; isActive?: boolean }
+export interface TaxFilters { nameContains?: string; codeContains?: string; rateMin?: number; rateMax?: number; isActive?: boolean }
+export interface PaymentTermFilters { nameContains?: string; codeContains?: string; daysMin?: number; daysMax?: number; isActive?: boolean }
+export interface ExpenseCategoryFilters { nameContains?: string; codeContains?: string; parentId?: string; isActive?: boolean }
+export interface SupplierFilters { nameContains?: string; codeContains?: string; contactPersonContains?: string; emailContains?: string; isActive?: boolean }
+export interface VendorFilters { nameContains?: string; codeContains?: string; contactPersonContains?: string; emailContains?: string; isActive?: boolean }
+
 export const masterDataKeys = {
   all: ['masterData'] as const,
-  productCategories: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'productCategories', skip, limit, isActive] as const,
+  productCategories: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'productCategories', page, pageSize, isActive] as const,
   productCategory: (id: string) => [...masterDataKeys.all, 'productCategory', id] as const,
-  customers: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'customers', skip, limit, isActive] as const,
+  customers: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'customers', page, pageSize, isActive] as const,
   customer: (id: string) => [...masterDataKeys.all, 'customer', id] as const,
-  uomList: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'uomList', skip, limit, isActive] as const,
+  uomList: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'uomList', page, pageSize, isActive] as const,
   uom: (id: string) => [...masterDataKeys.all, 'uom', id] as const,
-  taxList: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'taxList', skip, limit, isActive] as const,
+  taxList: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'taxList', page, pageSize, isActive] as const,
   tax: (id: string) => [...masterDataKeys.all, 'tax', id] as const,
-  paymentTermsList: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'paymentTermsList', skip, limit, isActive] as const,
+  paymentTermsList: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'paymentTermsList', page, pageSize, isActive] as const,
   paymentTerm: (id: string) => [...masterDataKeys.all, 'paymentTerm', id] as const,
-  expenseCategoriesList: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'expenseCategoriesList', skip, limit, isActive] as const,
+  expenseCategoriesList: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'expenseCategoriesList', page, pageSize, isActive] as const,
   expenseCategory: (id: string) => [...masterDataKeys.all, 'expenseCategory', id] as const,
-  suppliers: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'suppliers', skip, limit, isActive] as const,
+  suppliers: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'suppliers', page, pageSize, isActive] as const,
   supplier: (id: string) => [...masterDataKeys.all, 'supplier', id] as const,
-  vendors: (skip: number, limit: number, isActive?: boolean) =>
-    [...masterDataKeys.all, 'vendors', skip, limit, isActive] as const,
+  vendors: (page: number, pageSize: number, isActive?: boolean) =>
+    [...masterDataKeys.all, 'vendors', page, pageSize, isActive] as const,
   vendor: (id: string) => [...masterDataKeys.all, 'vendor', id] as const,
-  products: (skip: number, limit: number, categoryId?: string | null, isActive?: boolean, itemCodeContains?: string, nameContains?: string) =>
-    [...masterDataKeys.all, 'products', skip, limit, categoryId, isActive, itemCodeContains, nameContains] as const,
+  products: (page: number, pageSize: number, categoryId?: string | null, isActive?: boolean, itemCodeContains?: string, nameContains?: string) =>
+    [...masterDataKeys.all, 'products', page, pageSize, categoryId, isActive, itemCodeContains, nameContains] as const,
   product: (id: string) => [...masterDataKeys.all, 'product', id] as const,
 }
 
-export function useProductCategories(skip = 0, limit = 100, isActive?: boolean) {
+export function useProductCategories(page = 1, pageSize = 20, filters: ProductCategoryFilters = {}) {
+  const { isActive, nameContains, parentId } = filters
   return useQuery({
-    queryKey: masterDataKeys.productCategories(skip, limit, isActive),
+    queryKey: [...masterDataKeys.productCategories(page, pageSize, isActive), nameContains, parentId],
     queryFn: () =>
       executeGraphQL<{ productCategories: PaginatedList<ProductCategory> }>(PRODUCT_CATEGORIES, {
-        skip,
-        limit,
-        isActive,
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        parentId: parentId || undefined,
       }),
     staleTime: stale,
     gcTime: gc,
@@ -96,11 +108,18 @@ export function useProductCategory(id: string | null) {
   })
 }
 
-export function useCustomers(skip = 0, limit = 100, isActive?: boolean) {
+export function useCustomers(page = 1, pageSize = 20, filters: CustomerFilters = {}) {
+  const { isActive, nameContains, codeContains, contactNameContains, emailContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.customers(skip, limit, isActive),
+    queryKey: [...masterDataKeys.customers(page, pageSize, isActive), nameContains, codeContains, contactNameContains, emailContains],
     queryFn: () =>
-      executeGraphQL<{ customers: PaginatedList<Customer> }>(CUSTOMERS, { skip, limit, isActive }),
+      executeGraphQL<{ customers: PaginatedList<Customer> }>(CUSTOMERS, {
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        contactNameContains: contactNameContains || undefined,
+        emailContains: emailContains || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -116,11 +135,15 @@ export function useCustomer(id: string | null) {
   })
 }
 
-export function useUOMList(skip = 0, limit = 100, isActive?: boolean) {
+export function useUOMList(page = 1, pageSize = 20, filters: UOMFilters = {}) {
+  const { isActive, searchContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.uomList(skip, limit, isActive),
+    queryKey: [...masterDataKeys.uomList(page, pageSize, isActive), searchContains],
     queryFn: () =>
-      executeGraphQL<{ uomList: PaginatedList<UOM> }>(UOM_LIST, { skip, limit, isActive }),
+      executeGraphQL<{ uomList: PaginatedList<UOM> }>(UOM_LIST, {
+        page, pageSize, isActive,
+        searchContains: searchContains || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -136,11 +159,18 @@ export function useUOM(id: string | null) {
   })
 }
 
-export function useTaxList(skip = 0, limit = 100, isActive?: boolean) {
+export function useTaxList(page = 1, pageSize = 20, filters: TaxFilters = {}) {
+  const { isActive, nameContains, codeContains, rateMin, rateMax } = filters
   return useQuery({
-    queryKey: masterDataKeys.taxList(skip, limit, isActive),
+    queryKey: [...masterDataKeys.taxList(page, pageSize, isActive), nameContains, codeContains, rateMin, rateMax],
     queryFn: () =>
-      executeGraphQL<{ taxList: PaginatedList<Tax> }>(TAX_LIST, { skip, limit, isActive }),
+      executeGraphQL<{ taxList: PaginatedList<Tax> }>(TAX_LIST, {
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        rateMin: rateMin || undefined,
+        rateMax: rateMax || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -156,14 +186,17 @@ export function useTax(id: string | null) {
   })
 }
 
-export function usePaymentTermsList(skip = 0, limit = 100, isActive?: boolean) {
+export function usePaymentTermsList(page = 1, pageSize = 20, filters: PaymentTermFilters = {}) {
+  const { isActive, nameContains, codeContains, daysMin, daysMax } = filters
   return useQuery({
-    queryKey: masterDataKeys.paymentTermsList(skip, limit, isActive),
+    queryKey: [...masterDataKeys.paymentTermsList(page, pageSize, isActive), nameContains, codeContains, daysMin, daysMax],
     queryFn: () =>
       executeGraphQL<{ paymentTermsList: PaginatedList<PaymentTerm> }>(PAYMENT_TERMS_LIST, {
-        skip,
-        limit,
-        isActive,
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        daysMin: daysMin || undefined,
+        daysMax: daysMax || undefined,
       }),
     staleTime: stale,
     gcTime: gc,
@@ -181,14 +214,17 @@ export function usePaymentTerm(id: string | null) {
   })
 }
 
-export function useExpenseCategoriesList(skip = 0, limit = 100, isActive?: boolean) {
+export function useExpenseCategoriesList(page = 1, pageSize = 20, filters: ExpenseCategoryFilters = {}) {
+  const { isActive, nameContains, codeContains, parentId } = filters
   return useQuery({
-    queryKey: masterDataKeys.expenseCategoriesList(skip, limit, isActive),
+    queryKey: [...masterDataKeys.expenseCategoriesList(page, pageSize, isActive), nameContains, codeContains, parentId],
     queryFn: () =>
-      executeGraphQL<{ expenseCategoriesList: PaginatedList<ExpenseCategory> }>(
-        EXPENSE_CATEGORIES_LIST,
-        { skip, limit, isActive }
-      ),
+      executeGraphQL<{ expenseCategoriesList: PaginatedList<ExpenseCategory> }>(EXPENSE_CATEGORIES_LIST, {
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        parentId: parentId || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -205,11 +241,18 @@ export function useExpenseCategory(id: string | null) {
   })
 }
 
-export function useSuppliers(skip = 0, limit = 100, isActive?: boolean) {
+export function useSuppliers(page = 1, pageSize = 20, filters: SupplierFilters = {}) {
+  const { isActive, nameContains, codeContains, contactPersonContains, emailContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.suppliers(skip, limit, isActive),
+    queryKey: [...masterDataKeys.suppliers(page, pageSize, isActive), nameContains, codeContains, contactPersonContains, emailContains],
     queryFn: () =>
-      executeGraphQL<{ suppliers: PaginatedList<Supplier> }>(SUPPLIERS, { skip, limit, isActive }),
+      executeGraphQL<{ suppliers: PaginatedList<Supplier> }>(SUPPLIERS, {
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        contactPersonContains: contactPersonContains || undefined,
+        emailContains: emailContains || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -225,11 +268,18 @@ export function useSupplier(id: string | null) {
   })
 }
 
-export function useVendors(skip = 0, limit = 100, isActive?: boolean) {
+export function useVendors(page = 1, pageSize = 20, filters: VendorFilters = {}) {
+  const { isActive, nameContains, codeContains, contactPersonContains, emailContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.vendors(skip, limit, isActive),
+    queryKey: [...masterDataKeys.vendors(page, pageSize, isActive), nameContains, codeContains, contactPersonContains, emailContains],
     queryFn: () =>
-      executeGraphQL<{ vendors: PaginatedList<Vendor> }>(VENDORS, { skip, limit, isActive }),
+      executeGraphQL<{ vendors: PaginatedList<Vendor> }>(VENDORS, {
+        page, pageSize, isActive,
+        nameContains: nameContains || undefined,
+        codeContains: codeContains || undefined,
+        contactPersonContains: contactPersonContains || undefined,
+        emailContains: emailContains || undefined,
+      }),
     staleTime: stale,
     gcTime: gc,
   })
@@ -258,17 +308,17 @@ export interface ProductsFilters {
 }
 
 export function useProducts(
-  skip = 0,
-  limit = 100,
+  page = 1,
+  pageSize = 20,
   filters: ProductsFilters = {}
 ) {
   const { categoryId, isActive, itemCodeContains, nameContains, descriptionContains, makeContains, puUnitId, stkUnitId, locationInStoreContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.products(skip, limit, categoryId, isActive, itemCodeContains, nameContains),
+    queryKey: masterDataKeys.products(page, pageSize, categoryId, isActive, itemCodeContains, nameContains),
     queryFn: () =>
       executeGraphQL<{ products: PaginatedList<Product> }>(PRODUCTS, {
-        skip,
-        limit,
+        page,
+        pageSize,
         categoryId: categoryId ?? undefined,
         isActive,
         itemCodeContains: itemCodeContains ?? undefined,

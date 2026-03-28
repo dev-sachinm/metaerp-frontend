@@ -11,8 +11,10 @@ export interface NavItemConfig {
   entity?: string
   path: string
   label: string
+  /** If set, user must have THIS specific action (not just any) on the entity */
+  requiredAction?: 'create' | 'read' | 'update' | 'delete' | 'list'
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit'
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -50,6 +52,14 @@ export const NAV_ITEMS: NavItemConfig[] = [
     label: 'Projects',
     icon: 'project',
   },
+  {
+    moduleId: 'core',
+    entity: 'audit_log',
+    requiredAction: 'delete',
+    path: '/audit-logs',
+    label: 'Audit Logs',
+    icon: 'audit',
+  },
 ]
 
 /** Module IDs that own routes; use with RequireModule */
@@ -76,6 +86,7 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/projects/:id/assignment': 'project_management',
   '/emails': 'core',
   '/emails/:id': 'core',
+  '/audit-logs': 'core',
 }
 
 /** Resolve which module guards a path (first segment match) */
@@ -86,5 +97,6 @@ export function getModuleIdForPath(pathname: string): string | null {
   if (normalized.startsWith('/roles')) return 'core'
   if (normalized.startsWith('/master')) return 'master_data'
   if (normalized.startsWith('/projects')) return 'project_management'
+  if (normalized.startsWith('/audit-logs')) return 'core'
   return null
 }

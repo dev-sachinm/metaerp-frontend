@@ -155,9 +155,9 @@ export interface Product {
 export interface PaginatedList<T> {
   items: T[]
   total: number
-  skip: number
-  limit: number
   page: number
   totalPages: number
   hasMore: boolean
+  firstPage: number
+  lastPage: number
 }

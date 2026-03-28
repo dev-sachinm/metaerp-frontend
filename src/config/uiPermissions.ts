@@ -59,6 +59,12 @@ export const UI_PERMISSIONS = {
   CREATE_VENDOR:       { entity: 'vendor',           action: 'create' },
   EDIT_VENDOR:         { entity: 'vendor',           action: 'update' },
   DELETE_VENDOR:       { entity: 'vendor',           action: 'delete' },
+
+  // ── Audit Logs ──────────────────────────────────────────────────────────────
+  /** Full audit page in sidebar — requires delete permission (admin-level only). */
+  AUDIT_LOGS_MENU:     { entity: 'audit_log', action: 'delete' },
+  /** Dashboard widget — requires only read permission. */
+  AUDIT_LOGS_WIDGET:   { entity: 'audit_log', action: 'read'   },
 } satisfies Record<string, UIPermissionDef>
 
 export type UIPermissionKey = keyof typeof UI_PERMISSIONS
