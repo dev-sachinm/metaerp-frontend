@@ -47,11 +47,10 @@ export function useUpdateManufacturedStatusBulk(fixtureId: string) {
 export function useUpdateManufacturedReceivedQty(fixtureId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (vars: { partId: string; receivedLhQty: number | null; receivedRhQty: number | null }) =>
+    mutationFn: (vars: { partId: string; receivedQty: number | null }) =>
       executeGraphQL(UPDATE_MANUFACTURED_RECEIVED_QTY, {
         partId: vars.partId,
-        receivedLhQty: vars.receivedLhQty,
-        receivedRhQty: vars.receivedRhQty,
+        receivedQty: vars.receivedQty,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })

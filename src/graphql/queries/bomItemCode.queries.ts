@@ -17,15 +17,15 @@ export const GET_BOM_VIEW_ITEM_CODE = `
     ) {
       fixture { id fixtureNumber status }
       manufacturedParts {
-        id fixtureId srNo drawingNo description qtyLh qtyRh unitPrice status
-        vendorId vendorName receivedLhQty receivedRhQty
+        id fixtureId drawingNo description qty lhRh unitPrice status productId
+        vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
       }
       standardParts {
-        id fixtureId productId srNo unitId supplierId supplierName
-        uom
-        partNo productName productMake
-        expectedQty
+        id fixtureId productId unitId supplierId supplierName
+        uom lhRh
+        itemCode productName productMake
+        qty expectedQty
         currentStock
         purchaseQty
         purchaseUnitPrice
@@ -44,13 +44,14 @@ export const PARSE_PROJECT_BOM_FILE_ITEM_CODE = `
         duplicateDrawingCount
         newFixtureSeqs
         existingFixtureSeqs
+        bomFixtureSeq
+        fixtureMismatchCount
       }
       manufacturedParts {
-        srNo
         drawingNo
         description
-        qtyLh
-        qtyRh
+        qty
+        lhRh
         isWrongEntry
         wrongEntryReason
         fixtureSeq
@@ -65,17 +66,19 @@ export const PARSE_PROJECT_BOM_FILE_ITEM_CODE = `
         existingFixtureNumber
       }
       standardParts {
-        srNo
         drawingNo
         itemCode
         description
-        make
         qty
-        unit
+        lhRh
+        productFound
+        productId
+        isWrongEntry
+        wrongEntryReason
         fixtureSeq
-        similarProducts { id itemCode name make }
+        unitSeq
       }
-      wrongEntries { rowNum srNo rawValue reason }
+      wrongEntries { rowNum rawValue reason }
     }
   }
 `
@@ -90,11 +93,10 @@ export const PARSE_BOM_FILE_ITEM_CODE = `
         duplicateDrawingCount
       }
       manufacturedParts {
-        srNo
         drawingNo
         description
-        qtyLh
-        qtyRh
+        qty
+        lhRh
         isWrongEntry
         wrongEntryReason
         fixtureSeq
@@ -106,17 +108,19 @@ export const PARSE_BOM_FILE_ITEM_CODE = `
         duplicateFixtures { id fixtureNumber }
       }
       standardParts {
-        srNo
         drawingNo
         itemCode
         description
-        make
         qty
-        unit
+        lhRh
+        productFound
+        productId
+        isWrongEntry
+        wrongEntryReason
         fixtureSeq
-        similarProducts { id itemCode name make }
+        unitSeq
       }
-      wrongEntries { rowNum srNo rawValue reason }
+      wrongEntries { rowNum rawValue reason }
     }
   }
 `

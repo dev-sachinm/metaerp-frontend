@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import { Loader } from '@/components/Loader'
 import {
   CheckCircle2,
@@ -26,7 +25,6 @@ import type {
   ParsedManufacturedPart,
   ParsedStandardPart,
   WrongEntryResolution,
-  ProductMatchResolution,
 } from '@/types/design'
 
 function StepDots({ current, total }: { current: number; total: number }) {
@@ -174,7 +172,7 @@ function Step1Upload({ projectId, onDone }: Step1Props) {
 interface Step2Props {
   projectId: string
   s3Key: string
-  onDone: (wr: WrongEntryResolution[], pm: ProductMatchResolution[]) => void
+  onDone: (wr: WrongEntryResolution[]) => void
   onBack: () => void
 }
 
@@ -184,7 +182,6 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
   const [loadError, setLoadError] = useState('')
 
   const [wrongResolutions, setWrongResolutions] = useState<Record<string, WrongEntryResolution>>({})
-  const [productMatches, setProductMatches] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -216,7 +213,8 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
     if (r.action === 'override' && r.correctedDrawingNo) return false
     return true
   }).length
-  const canProceed = unresolvedCount === 0
+  const wrongStandardParts = (parsed?.standardParts ?? []).filter((p) => p.isWrongEntry).length
+  const canProceed = unresolvedCount === 0 && wrongStandardParts === 0
 
   if (loading) {
     return (
@@ -242,13 +240,8 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
 
   const handleNext = () => {
     const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
-    // Send ALL standard parts — include user-selected productId where available,
-    // empty string for unmatched (backend will store the part without a product link).
-    const pm: ProductMatchResolution[] = standardParts.map((p) => ({
-      itemCode: p.itemCode,
-      productId: productMatches[p.itemCode] ?? '',
-    }))
-    onDone(wr, pm)
+    // productMatchResolutions omitted — backend auto-resolves SRBOP parts
+    onDone(wr)
   }
 
   const duplicateCount = summary.duplicateDrawingCount ?? 0
@@ -400,9 +393,8 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                   )}
                 </div>
                 <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
-                  {p.qtyLh != null ? `LH:${p.qtyLh}` : ''}
-                  {p.qtyLh != null && p.qtyRh != null ? ' ' : ''}
-                  {p.qtyRh != null ? `RH:${p.qtyRh}` : ''}
+                  {p.qty != null ? `qty:${p.qty}` : ''}
+                  {p.lhRh ? ` (${p.lhRh})` : ''}
                 </span>
               </div>
             )})}
@@ -414,42 +406,46 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
       {standardParts.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-            Standard Parts — confirm product match ({standardParts.length})
+            Standard Parts ({standardParts.filter((p: ParsedStandardPart) => !p.isWrongEntry).length} linked
+            {standardParts.filter((p: ParsedStandardPart) => p.isWrongEntry).length > 0 &&
+              `, ${standardParts.filter((p: ParsedStandardPart) => p.isWrongEntry).length} not in master`})
           </h4>
           <div className="rounded-lg border border-slate-200 divide-y text-sm">
             {standardParts.map((p: ParsedStandardPart, i) => (
-              <div key={i} className="px-3 py-2 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-slate-500">{p.drawingNo}</span>
-                  <span className="font-mono text-xs text-indigo-600 ml-1">{p.itemCode}</span>
-                  <span className="text-slate-800 flex-1">{p.description}</span>
-                  <span className="text-xs text-slate-400 shrink-0">qty: {p.qty}</span>
-                </div>
-                {p.similarProducts.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs shrink-0 text-slate-500">Match:</Label>
-                    <select
-                      className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      value={productMatches[p.itemCode] ?? ''}
-                      onChange={(e) =>
-                        setProductMatches((prev) => ({ ...prev, [p.itemCode]: e.target.value }))
-                      }
-                    >
-                      <option value="">— auto-resolve (will create/match product) —</option>
-                      {p.similarProducts.map((sp) => (
-                        <option key={sp.id} value={sp.id}>
-                          {sp.itemCode ?? sp.id} — {sp.name}{sp.make ? ` (${sp.make})` : ''}
-                        </option>
-                      ))}
-                    </select>
+              <div key={i} className={`px-3 py-2 flex items-start gap-3 ${p.isWrongEntry ? 'bg-red-50/50' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs text-slate-500">{p.drawingNo}</span>
+                    <span className="font-mono text-xs text-indigo-600">{p.itemCode}</span>
+                    <span className="text-slate-700 truncate">{p.description}</span>
                   </div>
-                )}
-                {p.similarProducts.length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No suggestions — backend will auto-match by item code or create a new SRBOP-NNNN product.</p>
-                )}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-slate-400">qty: {p.qty ?? '—'}</span>
+                    {p.lhRh && <span className="text-xs text-slate-400">{p.lhRh}</span>}
+                    {p.isWrongEntry && p.wrongEntryReason && (
+                      <span className="text-xs text-red-600 italic">{p.wrongEntryReason}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0 mt-0.5">
+                  {p.productFound ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                      ✓ Linked
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                      ✗ Not in master
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
+          {standardParts.some((p: ParsedStandardPart) => p.isWrongEntry) && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2">
+              ⚠ Parts marked "Not in master" must be added to the Product master before re-uploading.
+            </p>
+          )}
         </div>
       )}
 
@@ -462,7 +458,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
           <div className="rounded-lg border border-red-100 bg-red-50 divide-y text-xs">
             {wrongEntries.map((w, i) => (
               <div key={i} className="px-3 py-1.5 text-red-700">
-                Row {w.rowNum}: {w.rawValue} — {w.reason}
+                Row {w.rowNum}: {w.rawValue ?? '(no value)'} — {w.reason}
               </div>
             ))}
           </div>
@@ -496,12 +492,11 @@ interface Step3Props {
   s3Key: string
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
-  productMatchResolutions: ProductMatchResolution[]
   onSuccess: () => void
   onBack: () => void
 }
 
-function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, productMatchResolutions, onSuccess, onBack }: Step3Props) {
+function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, onSuccess, onBack }: Step3Props) {
   const submit = useSubmitProjectBomUpload(projectId)
 
   const handleSubmit = async () => {
@@ -510,7 +505,6 @@ function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, produ
       s3Key,
       filename,
       wrongEntryResolutions,
-      productMatchResolutions,
     })
     onSuccess()
   }
@@ -588,17 +582,14 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
   const [s3Key, setS3Key] = useState('')
   const [filename, setFilename] = useState('')
   const [wrongResolutions, setWrongResolutions] = useState<WrongEntryResolution[]>([])
-  const [productMatches, setProductMatches] = useState<ProductMatchResolution[]>([])
-
   const handleStep1Done = (key: string) => {
     setS3Key(key)
     setFilename(key.split('/').pop() ?? key)
     setStep(1)
   }
 
-  const handleStep2Done = (wr: WrongEntryResolution[], pm: ProductMatchResolution[]) => {
+  const handleStep2Done = (wr: WrongEntryResolution[]) => {
     setWrongResolutions(wr)
-    setProductMatches(pm)
     setStep(2)
   }
 
@@ -633,7 +624,6 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
               s3Key={s3Key}
               filename={filename}
               wrongEntryResolutions={wrongResolutions}
-              productMatchResolutions={productMatches}
               onSuccess={onClose}
               onBack={() => setStep(1)}
             />

@@ -95,10 +95,8 @@ function ManufacturedPartRow({
   storeReceiving?: {
     enabled: boolean
     editing: boolean
-    draftLh: string
-    draftRh: string
-    onDraftLh: (v: string) => void
-    onDraftRh: (v: string) => void
+    draftQty: string
+    onDraftQty: (v: string) => void
     onBeginEdit: () => void
     onSave: () => void
     onCancel: () => void
@@ -121,13 +119,10 @@ function ManufacturedPartRow({
       <td className="py-1.5 px-2 text-xs font-mono text-slate-500 whitespace-nowrap">{part.drawingNo}</td>
       <td className="py-1.5 px-2 text-xs text-slate-700 max-w-[160px] truncate" title={part.description}>{part.description}</td>
       <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap text-center">
-        {part.qtyLh != null || part.qtyRh != null ? (
-          <span>
-            {part.qtyLh != null && <span className="text-slate-600">LH:{part.qtyLh}</span>}
-            {part.qtyLh != null && part.qtyRh != null && <span className="text-slate-300 mx-1">|</span>}
-            {part.qtyRh != null && <span className="text-slate-600">RH:{part.qtyRh}</span>}
-          </span>
-        ) : '—'}
+        {part.qty != null ? part.qty : '—'}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap text-center">
+        {part.lhRh ?? '—'}
       </td>
       <td className="py-1.5 px-2 text-xs text-slate-600 max-w-[110px] truncate" title={part.status ?? ''}>
         {formatManufacturedStatus(part.status)}
@@ -135,30 +130,14 @@ function ManufacturedPartRow({
       <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-mono">
         {storeReceiving?.editing ? (
           <Input
-            className="h-7 text-xs px-1 py-0 w-14"
+            className="h-7 text-xs px-1 py-0 w-20"
             type="number"
             step="any"
             min={0}
-            value={storeReceiving.draftLh}
-            onChange={(e) => storeReceiving.onDraftLh(e.target.value)}
+            value={storeReceiving.draftQty}
+            onChange={(e) => storeReceiving.onDraftQty(e.target.value)}
           />
-        ) : (
-          <span>{part.receivedLhQty != null ? part.receivedLhQty : '—'}</span>
-        )}
-      </td>
-      <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-mono">
-        {storeReceiving?.editing ? (
-          <Input
-            className="h-7 text-xs px-1 py-0 w-14"
-            type="number"
-            step="any"
-            min={0}
-            value={storeReceiving.draftRh}
-            onChange={(e) => storeReceiving.onDraftRh(e.target.value)}
-          />
-        ) : (
-          <span>{part.receivedRhQty != null ? part.receivedRhQty : '—'}</span>
-        )}
+        ) : '—'}
       </td>
       <td className="py-1.5 px-2 text-right whitespace-nowrap">
         {storeReceiving?.enabled && !storeReceiving.editing && (
@@ -239,9 +218,9 @@ function UnitSection({
                 <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Drawing No</th>
                 <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Description</th>
                 <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Qty</th>
+                <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">LH/RH</th>
                 <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Status</th>
-                <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Rec LH</th>
-                <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Rec RH</th>
+                <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Receive Qty</th>
                 <th className="py-1 px-2 text-right text-xs font-medium text-slate-400">Drawing</th>
               </tr>
             </thead>
@@ -345,14 +324,14 @@ function StandardPartsSection({
                             className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                             checked={selectedIds?.has(p.id) ?? false}
                             onChange={() => onTogglePart?.(p.id)}
-                            aria-label={`Select ${p.partNo ?? p.id}`}
+                            aria-label={`Select ${p.itemCode ?? p.id}`}
                           />
                         ) : (
                           <span className="text-xs text-slate-300">—</span>
                         )}
                       </td>
                     )}
-                    <td className="py-1.5 px-2 text-xs font-mono text-slate-500 whitespace-nowrap">{p.partNo ?? '—'}</td>
+                    <td className="py-1.5 px-2 text-xs font-mono text-slate-500 whitespace-nowrap">{p.itemCode ?? '—'}</td>
                     <td className="py-1.5 px-2 text-xs text-slate-700 max-w-[180px] truncate" title={p.productName ?? ''}>{p.productName ?? '—'}</td>
                     <td className="py-1.5 px-2 text-xs text-slate-500">{p.productMake ?? '—'}</td>
                     <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-medium">
@@ -454,8 +433,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkDlgOpen, setBulkDlgOpen] = useState(false)
   const [recvEditId, setRecvEditId] = useState<string | null>(null)
-  const [recvDraftLh, setRecvDraftLh] = useState('')
-  const [recvDraftRh, setRecvDraftRh] = useState('')
+  const [recvDraftQty, setRecvDraftQty] = useState('')
   const [recvQtyByLine, setRecvQtyByLine] = useState<Record<string, string>>({})
   const [priceDraftByLine, setPriceDraftByLine] = useState<Record<string, string>>({})
   const [savingPriceLineId, setSavingPriceLineId] = useState<string | null>(null)
@@ -480,8 +458,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     setSupplierId('')
     setBulkStatus('')
     setRecvEditId(null)
-    setRecvDraftLh('')
-    setRecvDraftRh('')
+    setRecvDraftQty('')
     setRecvQtyByLine({})
     setPriceDraftByLine({})
     setBomMode('default')
@@ -552,23 +529,15 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
   const beginRecvEdit = (part: ManufacturedPart) => {
     setRecvEditId(part.id)
-    setRecvDraftLh(part.receivedLhQty != null ? String(part.receivedLhQty) : '')
-    setRecvDraftRh(part.receivedRhQty != null ? String(part.receivedRhQty) : '')
+    setRecvDraftQty('')
   }
 
   const saveRecvEdit = async () => {
     if (!recvEditId) return
-    const lhRaw = recvDraftLh.trim()
-    const rhRaw = recvDraftRh.trim()
-    const lh = lhRaw === '' ? null : parseFloat(lhRaw)
-    const rh = rhRaw === '' ? null : parseFloat(rhRaw)
-    if (lh != null && Number.isNaN(lh)) return
-    if (rh != null && Number.isNaN(rh)) return
-    await updateRecvQty.mutateAsync({
-      partId: recvEditId,
-      receivedLhQty: lh,
-      receivedRhQty: rh,
-    })
+    const raw = recvDraftQty.trim()
+    const qty = raw === '' ? null : parseFloat(raw)
+    if (qty != null && Number.isNaN(qty)) return
+    await updateRecvQty.mutateAsync({ partId: recvEditId, receivedQty: qty })
     setRecvEditId(null)
   }
 
@@ -578,10 +547,8 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     return {
       enabled: true,
       editing,
-      draftLh: recvDraftLh,
-      draftRh: recvDraftRh,
-      onDraftLh: setRecvDraftLh,
-      onDraftRh: setRecvDraftRh,
+      draftQty: recvDraftQty,
+      onDraftQty: setRecvDraftQty,
       onBeginEdit: () => beginRecvEdit(part),
       onSave: () => void saveRecvEdit(),
       onCancel: () => setRecvEditId(null),

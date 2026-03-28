@@ -11,11 +11,11 @@ export const UPDATE_MANUFACTURED_STATUS_BULK = `
 `
 
 export const UPDATE_MANUFACTURED_RECEIVED_QTY = `
-  mutation UpdateManufacturedReceivedQty($partId: String!, $receivedLhQty: Float, $receivedRhQty: Float) {
-    updateManufacturedReceivedQty(partId: $partId, receivedLhQty: $receivedLhQty, receivedRhQty: $receivedRhQty) {
+  mutation UpdateManufacturedReceivedQty($partId: String!, $receivedQty: Float) {
+    updateManufacturedReceivedQty(partId: $partId, receivedQty: $receivedQty) {
       id
-      receivedLhQty
-      receivedRhQty
+      qty
+      lhRh
       status
     }
   }

@@ -50,17 +50,15 @@ export interface Fixture extends FixtureSummary {
 export interface ManufacturedPart {
   id: string
   fixtureId: string
-  srNo: string
   drawingNo: string
   description: string
-  qtyLh?: number | null
-  qtyRh?: number | null
+  qty?: number | null
+  lhRh?: string | null
   unitPrice?: number | null
   status?: string | null
+  productId?: string | null
   vendorId?: string | null
   vendorName?: string | null
-  receivedLhQty?: number | null
-  receivedRhQty?: number | null
   fixtureSeq: number
   unitSeq: number
   partSeq: number
@@ -71,14 +69,15 @@ export interface StandardPart {
   id: string
   fixtureId: string
   productId?: string | null
-  srNo: string
   unitId?: string | null
   supplierId?: string | null
   supplierName?: string | null
   uom?: string | null
-  partNo?: string | null
+  lhRh?: string | null
+  itemCode?: string | null
   productName?: string | null
   productMake?: string | null
+  qty?: number | null
   currentStock?: number | null
   expectedQty?: number | null
   purchaseQty?: number | null
@@ -106,11 +105,10 @@ export interface DrawingViewUrl {
 
 // ── BOM Parse (Step 2) ────────────────────────────────────────────────────────
 export interface ParsedManufacturedPart {
-  srNo: string
   drawingNo: string
   description: string
-  qtyLh?: number | null
-  qtyRh?: number | null
+  qty?: number | null
+  lhRh?: string | null
   isWrongEntry: boolean
   wrongEntryReason?: string | null
   fixtureSeq?: number | null
@@ -120,34 +118,27 @@ export interface ParsedManufacturedPart {
   hasDrawing: boolean
   isDuplicateInProject?: boolean
   duplicateFixtures?: { id: string; fixtureNumber: string }[]
-  /** true if the fixture (by fixtureSeq) already exists in the project */
   fixtureExists?: boolean
   existingFixtureId?: string | null
   existingFixtureNumber?: string | null
 }
 
-export interface SimilarProduct {
-  id: string
-  itemCode?: string | null
-  name: string
-  make?: string | null
-}
-
 export interface ParsedStandardPart {
-  srNo: string
   drawingNo: string
   itemCode: string
   description: string
-  make?: string | null
   qty: number
-  unit?: string | null
+  lhRh?: string | null
+  productFound: boolean
+  productId?: string | null
+  isWrongEntry: boolean
+  wrongEntryReason?: string | null
   fixtureSeq?: number | null
-  similarProducts: SimilarProduct[]
+  unitSeq?: number | null
 }
 
 export interface WrongEntry {
   rowNum: number
-  srNo?: string | null
   rawValue?: string | null
   reason: string
 }
