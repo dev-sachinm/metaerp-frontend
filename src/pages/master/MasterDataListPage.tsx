@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table'
 import { Loader } from '@/components/Loader'
 import { OperationNotPermitted } from '@/components/OperationNotPermitted'
-import { PlusCircle, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
+import { PlusCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye } from 'lucide-react'
 import { isPermissionError, getErrorMessage } from '@/lib/graphqlErrors'
 import { Input } from '@/components/ui/input'
 
@@ -86,8 +86,8 @@ export function MasterDataListPage<T extends { id: string }>({
   }, [items, enableSearch, normalizedSearch, getSearchText])
 
   const effectiveTotal = enableSearch && normalizedSearch ? filteredItems.length : total
-  const start = page * pageSize
-  const end = Math.min(start + pageSize, filteredItems.length)
+  // Backend handles skip/limit — items already represent the current page.
+  // No client-side re-slicing by page offset; just show all returned items.
   const showPagination = !normalizedSearch && totalPages > 1
   const hasActions = getViewHref || getEditHref || onDelete
   const queryFailed = Boolean(isError && error)
@@ -124,7 +124,7 @@ export function MasterDataListPage<T extends { id: string }>({
         <CardHeader>
           <CardTitle>{title} ({effectiveTotal})</CardTitle>
           <CardDescription>
-            {effectiveTotal === 0 ? 'No records yet.' : `Showing ${start + 1}-${end} of ${effectiveTotal}.`}
+            {effectiveTotal === 0 ? 'No records yet.' : `Showing ${filteredItems.length} of ${effectiveTotal} record${effectiveTotal !== 1 ? 's' : ''}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -164,7 +164,7 @@ export function MasterDataListPage<T extends { id: string }>({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredItems.slice(start, end).map((row) => (
+                  {filteredItems.map((row) => (
                     <TableRow
                       key={row.id}
                       className={onRowClick ? 'cursor-pointer hover:bg-slate-50' : undefined}
@@ -212,24 +212,44 @@ export function MasterDataListPage<T extends { id: string }>({
                   <span className="text-sm text-slate-600">
                     Page {page + 1} of {totalPages}
                   </span>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onPageChange(0)}
+                      disabled={page <= 0}
+                      title="First page"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onPageChange(page - 1)}
                       disabled={page <= 0}
+                      title="Previous page"
                     >
                       <ChevronLeft className="h-4 w-4" />
-                      Previous
+                      Prev
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onPageChange(page + 1)}
                       disabled={page >= totalPages - 1}
+                      title="Next page"
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onPageChange(totalPages - 1)}
+                      disabled={page >= totalPages - 1}
+                      title="Last page"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

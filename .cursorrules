@@ -1,0 +1,264 @@
+# METAERP Frontend — Cursor Rules
+
+This project is the **METAERP frontend only**. Backend is a separate project (FastAPI, GraphQL, PostgreSQL, Redis). All rules below are **mandatory** for this ERP application; data integrity, permissions, and consistency are critical.
+
+METAERP is a **multi-tenant ERP for fixture manufacturing** (robotics, automation, mechanical engineering). It manages the full lifecycle from design to dispatch with **10 distinct user roles** and **strict cost visibility by role**. When implementing or changing features, align with the BRD/SRS and use the RTM for requirement traceability.
+
+---
+
+## 1. Project & Authority Documents
+
+- **Business & requirements** (source of truth for business rules, cost visibility, workflows):
+  - `METAERP_BRD_v1_1.md` — Business requirements, 10 roles, Cost Visibility Matrix, project/fixture/BOM/procurement rules.
+  - `METAERP_SRS_v1_1.md` — Functional (FR-*) and non-functional (NFR-*) requirements; use for implementation and acceptance.
+  - `METAERP_RTM_v1_1.md` — BRD → SRS mapping; use when implementing a feature to trace BRD codes to FR IDs.
+- **User roles, entity permissions, and field-level permissions (including cost fields)** — use **`BACKEND_IMPLEMENTATION_STATE.md`** as the **source of truth** for GraphQL. It defines the GraphQL APIs (`currentUser`, `myPermissions`, `entityPermissions(roleId, skip, limit)`, `fieldPermissions(roleId, skip, limit)`), the permission shape (`entities[entity].create|read|update|delete`, `entities[entity].fields[fieldName].read|write`), login (username + password), createUser (optional dateOfBirth, mobileNumber, email), and how to check permissions. Do not rely on BRD/SRS alone for this; implement to match BACKEND_IMPLEMENTATION_STATE.md.
+- **Integration & architecture** (read when changing API, auth, or structure):
+  - `BACKEND_IMPLEMENTATION_STATE.md` — GraphQL API, auth flow (username-based login), pagination, permissions, error handling (source of truth for backend contract).
+  - `FRONTEND_PREFERRED_PROJECT_CONTEXT.md` — FSD architecture, folder structure, patterns, coding guidelines.
+- **Secondary**: `BACKEND_CONTEXT.md` for REST/field-permission context if needed.
+- **Do not** invent API contracts, auth flows, permission shapes, or permission APIs; derive them from BACKEND_IMPLEMENTATION_STATE.md and the GraphQL schema.
+
+---
+
+## 2. Business & Requirements (BRD / SRS / RTM)
+
+When implementing or changing UI, permissions, or workflows, follow the BRD/SRS and use the RTM to trace BRD items to SRS requirement IDs (FR-*, NFR-*).
+
+### 2.1 The 10 User Roles
+
+| Role | Scope |
+|------|--------|
+| Operations Head (Owner) | Full visibility, financials, user management |
+| Project Managers | Timeline, resource allocation, project budget tracking |
+| Design Team | BOM upload, version control, drawing management |
+| Procurement Team | Vendor/supplier, PO creation, cost tracking (purchase budget / cost breakdown only) |
+| Manufacturing Team | Part manufacturing, vendor coordination, status updates (no cost visibility) |
+| Quality Team | Inspection tracking, quality status (no cost visibility) |
+| Store/Inventory | Stock, receipt tracking, location (no cost visibility) |
+| Assembly Team | Parts availability, assembly, issue reporting (no cost visibility) |
+| CMM Operators | Inspection workflows, confirmation (no cost visibility) |
+| Accounts Team | Dispatch prerequisites, invoice generation, cost visibility, payment |
+
+One role per account (FR-AUTH-004). Restrict routes and UI actions by role; hide cost-related fields per Cost Visibility Matrix.
+
+### 2.2 Cost Visibility Matrix (Strict)
+
+| Role | Project Value | Total Cost | Project Budget | Purchase Budget | Cost Breakdown |
+|------|---------------|------------|----------------|-----------------|-----------------|
+| Operations Head (Owner) | Yes | Yes | Yes | Yes | Yes |
+| Project Managers | No | No | Yes | Yes | Yes |
+| Design / Manufacturing / Quality / Store / Assembly / CMM | No | No | No | No | No |
+| Procurement Team | No | No | No | Yes | Yes |
+| Accounts Team | Yes | No | No | No | No |
+
+Do **not** show Project Value, Total Cost, Project Budget, Purchase Budget, or Cost Breakdown to roles that have "No" above. Use entity/field-level permissions from the API in addition to role checks where available.
+
+### 2.3 Project Rules
+
+- **Statuses**: Open, In Progress, On Hold, Completed, Cancelled (BR-PM-001, FR-PM-003).
+- **Project code**: Auto-generated format `PRJ-YYYYMMDD-XXX` (FR-PM-001). Project number is 5-character input (e.g. S25049) (FR-PM-002).
+- **Timeline**: Remaining days with color coding — Green: &lt;30 days, Orange: 30–60 days, Red: &gt;60 days (FR-PM-007).
+- **Actual delivery date**: Editable by **Owner only** (FR-PM-008). Other roles must not see an edit control for this field.
+
+### 2.4 Fixture Rules
+
+- **Naming hierarchy**: Project (5 chars) &gt; Fixture (Project-XXX) &gt; Unit (Fixture-XX) &gt; Drawing (Unit-XX). Fixture number derived from Drawing No. (first 8 chars) (FR-FX-001, FR-FX-002).
+- **Fixture status workflow**: Design Pending → Design In Progress → Procurement In Progress → Assembly Completed → CMM Confirmed → Dispatched (FR-FX-003, FR-FX-004).
+- **Version**: Starts at 1.0. Revisions (R1, R2) and ECNs (ECN1, ECN2) increment version by 1.0; rework does **not** change version (BR-FX-003).
+- **Dispatch flags**: Painting Completed, Packaging Completed, Transportation Booked, Insurance. Accounts must see all prerequisites before invoice (BR-FX-004, FR-DSP-001).
+
+### 2.5 BOM & Parts
+
+- **Part status workflow**: Pending → Inprogress → Quality Checked → Received (FR-BOM-003).
+- **Wrong Entry**: Invalid/missing Drawing No. → flag as Wrong Entry, status Review Required. **Block fixture submission** until all wrong entries are resolved (FR-DU-004, FR-DU-005).
+- **Cost**: Cost per piece = sum of cost breakdown labels; Total cost = (QTY LH + QTY RH) × Cost per piece (FR-BOM-004–006). Show only to roles allowed by Cost Visibility Matrix.
+
+### 2.6 Procurement
+
+- **Vendor/supplier**: Selected at **bulk level**, not per row (FR-PR-002). **Procurement must NOT edit quantity fields** (FR-PR-005).
+- **Lock after PO**: Quantity, cost, and vendor fields locked after PO creation (FR-PR-004).
+- **Excel**: Export for cost entry offline; import with cost breakdown (FR-PR-006, FR-PR-007). Cost breakdown popup per row (FR-PR-008).
+
+### 2.7 Non-Functional (NFR)
+
+- **Performance**: Response within 3 seconds under normal load; support BOMs with many parts and bulk operations (NFR-PERF-001 to NFR-PERF-003).
+- **UI**: Desktop-first, responsive; **pagination and filters for all tables** (BRD 7.1). Expandable/collapsible project hierarchy where specified (FR-PM-009).
+
+---
+
+## 3. Tech Stack (Strict — Use Extensively)
+
+**Canonical frontend stack.** Use this stack **whenever applicable and correct**. Prefer it for all new and refactored code. Do not introduce alternatives (custom form components, other UI libs, other table libs) unless the team explicitly adds them.
+
+### 3.1 Frontend
+
+| Purpose | Technology |
+|--------|------------|
+| Framework & build | React 18+ (with Vite) |
+| Routing | React Router (navigation) |
+| Server/API state | TanStack Query (API state management) |
+| Global client state | Zustand |
+| Complex forms | React Hook Form (complex forms) |
+| Data tables | TanStack Table (use heavily — essential for ERP) |
+| UI component library | shadcn/ui |
+| API calls | GraphQL via `src/graphql/client.ts`; Axios where REST is still used |
+
+### 3.2 UI Foundation
+
+| Purpose | Technology |
+|--------|------------|
+| Styling | Tailwind CSS (styling engine) |
+| Base components | shadcn/ui (buttons, modals, dropdowns, **forms**, inputs, cards, etc.) |
+| Data tables | TanStack Table (powerful data tables — **ESSENTIAL for ERP**) |
+| Dates | React DayPicker or shadcn Calendar (date handling) |
+| Icons | Lucide Icons (modern icon set, works with shadcn) |
+| Toasts | Sonner (toast notifications — sleek) |
+| Command palette | cmdk (modern UX pattern) |
+| Animations | Framer Motion (subtle animations — premium feel) |
+
+### 3.3 Use extensively
+
+- **shadcn/ui**: Use for **all** UI — buttons, modals, dropdowns, **forms** (add shadcn Form and use FormField, FormItem, FormControl, FormLabel, FormMessage), inputs, cards, dialogs, select. Add via `npx shadcn@latest add <component>` when missing; do not build custom equivalents.
+- **TanStack Table**: Use for every substantial list/table (sorting, filtering, pagination).
+- **React Hook Form + Zod**: All form state and validation; wire to shadcn Form when available.
+- **Zustand**: Auth and non-server client state only.
+- **TanStack Query**: All server/API state.
+- **Sonner**: All toasts; no `alert()` for normal feedback.
+- **Lucide**: All icons.
+- **Framer Motion**: Subtle transitions where they add clarity or polish.
+
+---
+
+## 4. Architecture: Feature-Sliced Design
+
+- **Layers** (top → bottom): `app` → `pages` → `widgets` → `features` → `entities` → `shared`.
+- **Imports**: Higher layers may import from lower layers. **Never** import from a higher layer into a lower one (e.g. `shared/` must not import from `features/` or `pages/`).
+- **Path alias**: Use `@/` for `src/` (e.g. `@/graphql/client`, `@/components/ui/button`).
+- **Features**: Expose a single public API via `index.ts`; other modules import from that index, not from internal paths.
+- **Shared**: No business logic; only UI primitives, utils, hooks, and config. No feature-specific types or API calls.
+
+Target structure (align new code with this; see `FRONTEND_PREFERRED_PROJECT_CONTEXT.md` for full tree):
+
+- `app/` — providers, router, global styles.
+- `pages/` — route components; thin, compose widgets/features.
+- `widgets/` — composite UI (layout, BOM table, wizards).
+- `features/<domain>/` — api, hooks, components, types, index.ts.
+- `entities/<entity>/` — model (types), minimal UI.
+- `shared/` — api client, ui, lib, hooks, config.
+
+---
+
+## 5. GraphQL Rules
+
+- **Endpoint**: Use `VITE_GRAPHQL_ENDPOINT` (default `http://localhost:8000/graphql`). All requests go through `src/graphql/client.ts`.
+- **Fragments**: Define reusable field sets in `src/graphql/fragments/`. Use fragments in queries/mutations; avoid duplicating field lists.
+- **Queries/mutations**: Live in `src/graphql/queries/` and `src/graphql/mutations/`. Use variables; no string interpolation for user input in GraphQL.
+- **Types**: Use generated types from `src/graphql/types.generated.ts`. Do **not** edit that file; run `npm run codegen` after schema or document changes.
+- **Query keys**: Use a factory per domain (e.g. `userKeys.list({ skip, limit })`). Use the same keys for cache invalidation and hooks.
+- **Hooks**: TanStack Query hooks in `src/hooks/graphql/` (or under features) that call the GraphQL client and use the query key factory.
+- **Auth errors**: On `UNAUTHENTICATED`, refresh token (see BACKEND_IMPLEMENTATION_STATE.md), retry once, then logout and redirect to login. Handle in client/request layer, not in every component.
+- **Pagination**: Backend uses `skip`/`limit`; responses include `items`, `total`, `hasMore`, `page`, `totalPages`. Use these fields; do not assume a different shape.
+
+---
+
+## 6. Authentication & Permissions
+
+- **Tokens**: Access token in memory (Zustand). Refresh token per backend (e.g. httpOnly cookie or secure storage as per BACKEND_IMPLEMENTATION_STATE.md). Never log or expose tokens in UI.
+- **Auth store**: Use the project’s auth store (e.g. `authStore`) for login, logout, token, and refresh. Attach Bearer token to GraphQL (and any REST) requests via the shared client.
+- **Permissions**: Backend exposes entity/field-level permissions (e.g. `myPermissions`). Use `PermissionGuard`, `FieldGuard`, or equivalent and the permissions hook so that:
+  - Routes and actions respect entity create/read/update/delete.
+  - Tables and forms show only fields the user can read/write.
+- **Role-based UI**: Respect cost visibility and role rules from BRD/SRS (see project context doc). Do not show cost/total fields to roles that must not see them.
+
+### 6.1 Permission guarding (mandatory — permission-critical application)
+
+**Every route, component, and function that depends on an entity/action or field MUST be guarded.** Do not rely only on “the user can’t see the button” — guard at route, UI, and handler level.
+
+- **Routes**: For any route that serves an entity list, create, edit, or view screen, wrap the page in `ProtectedRoute` with the appropriate `entity` and `action` (e.g. `entity="user"` `action="list"` for the users list, `action="create"` for create user). This blocks direct URL access for users without permission.
+- **Components**: Use `PermissionGuard` to hide or replace UI that performs an action (e.g. Create button, Edit/Delete buttons, Export). Use `FieldGuard` to hide or make readonly fields the user must not see or edit.
+- **Handlers**: Inside any handler that performs a privileged action (e.g. delete, export, submit mutation), re-check permission (e.g. `useCanAccess` or `useEntityActions`) and return early or show an error if the user no longer has permission. Do not only rely on the button being hidden.
+- **New features**: When adding a new entity or action, add the corresponding route guard, component guards for buttons/links, and handler checks before calling the API.
+
+---
+
+## 7. State Management
+
+- **Server state**: TanStack Query only. No duplicate server data in Zustand.
+- **Client state**: Zustand for auth, UI preferences, and non-server state.
+- **Form state**: React Hook Form. Validate with Zod schemas and `@hookform/resolvers/zod`.
+
+---
+
+## 8. Data Tables & Lists
+
+- Use **TanStack Table** for all substantial tables (sorting, filtering, pagination).
+- Prefer hybrid pagination when specified: fetch in batches (e.g. 1000) via GraphQL, use TanStack Table for client-side paging and fetch next batch when needed (see FRONTEND_PREFERRED_PROJECT_CONTEXT.md).
+- **Permission-aware columns**: Show/hide columns based on field permissions; do not expose restricted fields (e.g. cost, PII) to unauthorized roles.
+- Provide loading and empty states; handle errors without leaking internal messages.
+
+---
+
+## 8. UI & Styling
+
+- **Components**: Use **shadcn/ui** for all UI (buttons, modals, dropdowns, forms, inputs, cards, etc.). Add components via `npx shadcn@latest add <component>`. This is the UI foundation; use it extensively.
+- **Styling**: Tailwind CSS only. Use design tokens (e.g. `hsl(var(--primary))`) from the theme; avoid arbitrary values unless necessary.
+- **No inline styles**: Do not use the `style` prop. Use Tailwind or CSS classes only.
+- **Icons**: Lucide React only.
+- **Feedback**: Sonner for toasts; no `alert()` for normal feedback.
+- **Animations**: Framer Motion for subtle, fast transitions; no heavy or distracting motion.
+- **No UUIDs in the UI**: UUIDs and internal database IDs are not user-friendly. **Never display** id/UUID in tables, cards, labels, toasts, or confirm dialogs. Use human-readable identifiers only (e.g. email, username, name, code) for all user-facing text. Use id only internally (e.g. API calls, routing, keys); never show it to the user.
+
+---
+
+## 9. TypeScript
+
+- **Strict**: No `any`. Use `unknown` and narrow if type is truly unknown.
+- **Typing**: Type all props, hooks, and API responses. Use generated GraphQL types and Zod-inferred types for forms.
+- **Imports**: Prefer `import type` for types/interfaces.
+
+---
+
+## 10. File & Naming Conventions
+
+- **Components**: `kebab-case.tsx` (e.g. `project-form.tsx`).
+- **Hooks**: `use-kebab-case.ts` or `useKebabCase.ts` (match existing project).
+- **Types**: `kebab-case.types.ts` or colocated in feature.
+- **Stores**: `kebab-case.store.ts`.
+- **GraphQL**: `*.queries.ts`, `*.mutations.ts`, `*.fragments.ts`.
+- **Feature API**: `*.api.ts`, `*.queries.ts` under the feature.
+
+---
+
+## 11. Forms
+
+- **Stack**: React Hook Form + Zod + **shadcn Form**. Add shadcn Form if missing (`npx shadcn@latest add form`). Use Form, FormField, FormItem, FormControl, FormLabel, FormMessage with RHF; do not use custom form field wrappers when shadcn Form is available.
+- Define Zod schema, infer type, use `zodResolver(schema)` with the form.
+- **Validation timing**: Use `mode: 'onBlur'` so validation runs when the user leaves a field (blur), not only on submit.
+- Submit: call mutation (e.g. TanStack Query), show loading on submit button, toast (Sonner) on success/error, invalidate relevant queries on success.
+
+---
+
+## 12. Error Handling
+
+- **GraphQL**: Centralize in the GraphQL client (e.g. `executeGraphQL` or equivalent). Map `UNAUTHENTICATED` → refresh then retry; `FORBIDDEN` and validation errors → user-facing message via toast.
+- **React**: Use error boundaries for route or feature sections. Do not let uncaught errors break the whole app.
+- **User messages**: Show clear, non-technical messages; avoid raw stack traces or internal codes in UI.
+
+---
+
+## 13. ERP-Specific Rules
+
+- **Data integrity**: No client-side-only edits that bypass validation or permissions. All mutations must go through the defined API with proper permission checks.
+- **Cost & financial data**: Visibility follows the Cost Visibility Matrix and roles (see FRONTEND_PREFERRED_PROJECT_CONTEXT.md). Hide totals/cost breakdowns from roles that must not see them.
+- **Ids and keys**: Use backend-provided ids (e.g. UUIDs); do not invent ids for entities that are persisted on the server.
+- **Naming and codes**: Follow business rules for project codes, fixture numbers, and statuses as defined in the project context; do not invent new formats.
+
+---
+
+## 14. Commands & Checks
+
+- `npm run codegen` — regenerate GraphQL types after schema or document changes.
+- Before committing: type-check and lint (e.g. `npm run build` or `tsc --noEmit`, and the project’s lint script).
+
+When adding features or refactoring, re-read the relevant sections of `BACKEND_IMPLEMENTATION_STATE.md` and `FRONTEND_PREFERRED_PROJECT_CONTEXT.md` so changes stay aligned with backend and architecture.

@@ -20,12 +20,12 @@ export const axiosInstance: AxiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     const correlationId = createCorrelationId()
-    if (!config.headers) config.headers = {}
-    config.headers['X-Correlation-ID'] = correlationId
+    if (!config.headers) config.headers = {} as any
+    ;(config.headers as any)['X-Correlation-ID'] = correlationId
 
     const token = localStorage.getItem(TOKEN_KEY)
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      ;(config.headers as any).Authorization = `Bearer ${token}`
     }
 
     logger.info('HTTP request', {

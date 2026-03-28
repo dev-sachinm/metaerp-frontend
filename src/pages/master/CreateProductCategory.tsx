@@ -108,7 +108,7 @@ export function CreateProductCategory() {
                           <FormControl>
                             <select
                               className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                              value={field.value ?? ''}
+                              value={typeof field.value === 'string' ? field.value : ''}
                               onChange={(e) => field.onChange(e.target.value || null)}
                               disabled={categoriesLoading}
                             >

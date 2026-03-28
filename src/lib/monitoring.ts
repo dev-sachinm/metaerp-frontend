@@ -49,16 +49,16 @@ export function initMonitoring() {
           textSanitizer: true,
         },
         network: {
-          requestSanitizer: (req: { headers?: Record<string, string>; body?: string }) => {
+          requestSanitizer: (req: any) => {
             if (!req) return req
-            const headers = { ...req.headers }
+            const headers = { ...(req.headers ?? {}) } as Record<string, unknown>
             const sensitive = /authorization|auth|cookie|token|password/i
             for (const key of Object.keys(headers)) {
               if (sensitive.test(key)) headers[key] = '[REDACTED]'
             }
             return { ...req, headers, body: req.body ? '[REDACTED]' : undefined }
           },
-          responseSanitizer: (res: { body?: string }) => {
+          responseSanitizer: (res: any) => {
             if (!res) return res
             return { ...res, body: res.body ? '[REDACTED]' : undefined }
           },

@@ -27,6 +27,13 @@ export const UI_PERMISSIONS = {
   UPLOAD_BOM:          { entity: 'fixture', action: 'update' },
   VIEW_BOM:            { entity: 'fixture', action: 'read'   },
 
+  // ── Purchase orders (BOM: create manufacturing / standard PO) ─────────────
+  /** Requires `purchase_order.create` on backend (procurement). */
+  CREATE_PURCHASE_ORDER_PO: { entity: 'purchase_order', action: 'create' },
+
+  /** Store / QA: receive standard parts, received LH/RH, bulk mfg status, unit price — uses `fixture.update`. */
+  MANAGE_BOM_RECEIVING: { entity: 'fixture', action: 'update' },
+
   // ── Project Assignments ───────────────────────────────────────────────────
   ASSIGN_PROJECT:      { entity: 'project_assignment', action: 'update' },
 

@@ -47,6 +47,8 @@ import { ProjectsList } from './pages/projects/ProjectsList'
 import { ProjectAssignmentPage } from './pages/projects/ProjectAssignmentPage'
 import { ViewProject } from './pages/projects/ViewProject'
 import { EditProject } from './pages/projects/EditProject'
+import { EmailsList } from './pages/email/EmailsList'
+import { ViewEmail } from './pages/email/ViewEmail'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuthQueries'
@@ -383,6 +385,44 @@ function AppContent() {
             <RequireModule moduleId="core">
               <ProtectedRoute entity="user" action="list">
                 <UsersList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* Emails (core, permission guarded on email.read) */}
+      <Route
+        path="/emails"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="email" action="read">
+                <EmailsList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/emails/:id"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="email" action="read">
+                <ViewEmail />
               </ProtectedRoute>
             </RequireModule>
           ) : (

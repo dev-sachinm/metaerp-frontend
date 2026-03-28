@@ -23,7 +23,7 @@ interface Props {
   canUpdate?: boolean
 }
 
-export function FixturesTab({ projectId, projectName, canCreate = true, canUpdate = true }: Props) {
+export function FixturesTab({ projectId, projectName, canCreate = true }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [showAdd, setShowAdd] = useState(false)
   const [editFixtureId, setEditFixtureId] = useState<string | null>(null)
@@ -111,7 +111,6 @@ export function FixturesTab({ projectId, projectName, canCreate = true, canUpdat
             projectId={projectId}
             projectName={projectName}
             fixtures={fixtures}
-            onEdit={canUpdate ? setEditFixtureId : () => {}}
           />
         </div>
       )}

@@ -144,9 +144,38 @@ export const VENDOR = `
 `
 
 export const PRODUCTS = `
-  query Products($skip: Int!, $limit: Int!, $categoryId: String, $isActive: Boolean) {
-    products(skip: $skip, limit: $limit, categoryId: $categoryId, isActive: $isActive) {
-      items { id name categoryId partNo description make unitId unitName quantity isActive createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt }
+  query Products(
+    $skip: Int!
+    $limit: Int!
+    $categoryId: String
+    $isActive: Boolean
+    $itemCodeContains: String
+    $nameContains: String
+    $descriptionContains: String
+    $makeContains: String
+    $puUnitId: String
+    $stkUnitId: String
+    $locationInStoreContains: String
+  ) {
+    products(
+      skip: $skip
+      limit: $limit
+      categoryId: $categoryId
+      isActive: $isActive
+      itemCodeContains: $itemCodeContains
+      nameContains: $nameContains
+      descriptionContains: $descriptionContains
+      makeContains: $makeContains
+      puUnitId: $puUnitId
+      stkUnitId: $stkUnitId
+      locationInStoreContains: $locationInStoreContains
+    ) {
+      items {
+        id itemCode name description make
+        puUnitId stkUnitId puUnitName stkUnitName
+        procMtd locationInStore quantity isActive categoryId
+        createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
+      }
       ${LIST_FIELDS}
     }
   }
@@ -157,12 +186,16 @@ export const PRODUCT = `
     product(id: $id) {
       id
       categoryId
-      partNo
+      itemCode
       name
       description
       make
-      unitId
-      unitName
+      puUnitId
+      stkUnitId
+      puUnitName
+      stkUnitName
+      procMtd
+      locationInStore
       quantity
       isActive
       createdAt

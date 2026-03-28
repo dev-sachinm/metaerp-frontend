@@ -3,6 +3,8 @@ import { MasterDataListPage } from './MasterDataListPage'
 import { useProducts } from '@/hooks/graphql/useMasterDataQueries'
 import { useDeleteProduct } from '@/hooks/graphql/useMasterDataMutations'
 import { useAccessibleFields, canShowColumn } from '@/hooks/usePermissions'
+import { useDebounce } from '@/hooks/useDebounce'
+import { Input } from '@/components/ui/input'
 import type { Product } from '@/types/masterData'
 import { Badge } from '@/components/ui/badge'
 
@@ -11,7 +13,20 @@ const ENTITY = 'product'
 
 export function ProductsList() {
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, error, refetch } = useProducts(page * PAGE_SIZE, PAGE_SIZE, null, undefined)
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 350)
+
+  // Reset to first page whenever the search term changes
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    setPage(0)
+  }
+
+  const { data, isLoading, isError, error, refetch } = useProducts(page * PAGE_SIZE, PAGE_SIZE, {
+    // Single debounced term sent to both itemCode and name filters for broad match
+    itemCodeContains: debouncedSearch || undefined,
+    nameContains: debouncedSearch || undefined,
+  })
   const deleteProduct = useDeleteProduct()
   const readableFields = useAccessibleFields(ENTITY, 'read')
 
@@ -32,7 +47,7 @@ export function ProductsList() {
   const columns = useMemo(() => {
     const cols: { header: string; cell: (r: Product) => ReactNode }[] = []
     if (canShowColumn(readableFields, 'name')) cols.push({ header: 'Name', cell: (r: Product) => <span className="font-medium">{r.name}</span> })
-    if (canShowColumn(readableFields, 'partNo')) cols.push({ header: 'Part No', cell: (r: Product) => r.partNo ?? '—' })
+    if (canShowColumn(readableFields, 'itemCode')) cols.push({ header: 'Item Code', cell: (r: Product) => r.itemCode ?? '—' })
     if (canShowColumn(readableFields, 'categoryId') || canShowColumn(readableFields, 'categoryName')) {
       cols.push({
         header: 'Category',
@@ -46,7 +61,9 @@ export function ProductsList() {
       })
     }
     if (canShowColumn(readableFields, 'make')) cols.push({ header: 'Make', cell: (r: Product) => r.make ?? '—' })
-    if (canShowColumn(readableFields, 'unitId')) cols.push({ header: 'Unit', cell: (r: Product) => r.unitName ?? r.unitId ?? '—' })
+    if (canShowColumn(readableFields, 'puUnitId')) cols.push({ header: 'PU Unit', cell: (r: Product) => r.puUnitName ?? r.puUnitId ?? '—' })
+    if (canShowColumn(readableFields, 'stkUnitId')) cols.push({ header: 'Stock Unit', cell: (r: Product) => r.stkUnitName ?? r.stkUnitId ?? '—' })
+    if (canShowColumn(readableFields, 'locationInStore')) cols.push({ header: 'Location', cell: (r: Product) => r.locationInStore ?? '—' })
     if (canShowColumn(readableFields, 'quantity')) cols.push({ header: 'Stock', cell: (r: Product) => r.quantity ?? '—' })
     if (canShowColumn(readableFields, 'isActive')) {
       cols.push({
@@ -71,10 +88,28 @@ export function ProductsList() {
     return cols
   }, [readableFields])
 
-  const getSearchText = (r: Product) =>
-    `${r.name ?? ''} ${r.partNo ?? ''} ${r.categoryId ?? ''} ${r.make ?? ''}`.toLowerCase()
-
   return (
+    <>
+      <div className="flex items-center gap-2 mb-3">
+        <Input
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search by item code, name, description…"
+          className="h-8 w-72"
+        />
+        {debouncedSearch && (
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-slate-800 underline"
+            onClick={() => handleSearchChange('')}
+          >
+            Clear
+          </button>
+        )}
+        {isLoading && debouncedSearch && (
+          <span className="text-xs text-slate-400">Searching…</span>
+        )}
+      </div>
     <MasterDataListPage<Product>
       title="Products"
       description="Manage products"
@@ -84,9 +119,6 @@ export function ProductsList() {
       total={total}
       items={items}
       columns={columns}
-      enableSearch
-      searchPlaceholder="Search by name, part no, category…"
-      getSearchText={getSearchText}
       getEditHref={(r) => `/master/products/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteProduct.isPending}
@@ -98,5 +130,6 @@ export function ProductsList() {
       error={error}
       onRetry={() => refetch()}
     />
+    </>
   )
 }

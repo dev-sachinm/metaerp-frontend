@@ -38,6 +38,8 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   KeyRound,
 } from 'lucide-react'
 import { OperationNotPermitted } from '@/components/OperationNotPermitted'
@@ -430,16 +432,26 @@ export function UsersList() {
                       </>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.firstPage()}
+                      disabled={!table.getCanPreviousPage()}
+                      title="First page"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => table.previousPage()}
                       disabled={!table.getCanPreviousPage()}
                       className="gap-1"
+                      title="Previous page"
                     >
                       <ChevronLeft className="h-4 w-4" />
-                      Previous
+                      Prev
                     </Button>
                     <Button
                       variant="outline"
@@ -447,9 +459,19 @@ export function UsersList() {
                       onClick={() => table.nextPage()}
                       disabled={!table.getCanNextPage()}
                       className="gap-1"
+                      title="Next page"
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.lastPage()}
+                      disabled={!table.getCanNextPage()}
+                      title="Last page"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

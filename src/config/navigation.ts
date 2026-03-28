@@ -12,7 +12,7 @@ export interface NavItemConfig {
   path: string
   label: string
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email'
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -74,6 +74,8 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/master/vendors': 'master_data',
   '/projects': 'project_management',
   '/projects/:id/assignment': 'project_management',
+  '/emails': 'core',
+  '/emails/:id': 'core',
 }
 
 /** Resolve which module guards a path (first segment match) */

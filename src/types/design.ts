@@ -49,12 +49,18 @@ export interface Fixture extends FixtureSummary {
 // ── BOM View ─────────────────────────────────────────────────────────────────
 export interface ManufacturedPart {
   id: string
+  fixtureId: string
+  srNo: string
   drawingNo: string
   description: string
   qtyLh?: number | null
   qtyRh?: number | null
-  /** Optional status from backend (if provided on BomView.manufacturedParts). */
+  unitPrice?: number | null
   status?: string | null
+  vendorId?: string | null
+  vendorName?: string | null
+  receivedLhQty?: number | null
+  receivedRhQty?: number | null
   fixtureSeq: number
   unitSeq: number
   partSeq: number
@@ -63,19 +69,20 @@ export interface ManufacturedPart {
 
 export interface StandardPart {
   id: string
-  srNo: string
-  qty: number
-  unitId?: string | null
+  fixtureId: string
   productId?: string | null
+  srNo: string
+  unitId?: string | null
+  supplierId?: string | null
+  supplierName?: string | null
+  uom?: string | null
   partNo?: string | null
   productName?: string | null
   productMake?: string | null
-  /** Current stock from product model */
   currentStock?: number | null
-  /** Expected quantity from standard part model */
   expectedQty?: number | null
-  /** Purchase quantity = expectedQty - currentStock (0 if negative) */
   purchaseQty?: number | null
+  purchaseUnitPrice?: number | null
 }
 
 export interface BomViewFixture {
@@ -121,18 +128,20 @@ export interface ParsedManufacturedPart {
 
 export interface SimilarProduct {
   id: string
-  partNo?: string | null
+  itemCode?: string | null
   name: string
   make?: string | null
 }
 
 export interface ParsedStandardPart {
   srNo: string
-  partNumber: string
+  drawingNo: string
+  itemCode: string
   description: string
   make?: string | null
   qty: number
   unit?: string | null
+  fixtureSeq?: number | null
   similarProducts: SimilarProduct[]
 }
 
@@ -167,7 +176,7 @@ export interface WrongEntryResolution {
 }
 
 export interface ProductMatchResolution {
-  partNumber: string
+  itemCode: string
   /** Empty string means no product matched — backend stores the part without a product link */
   productId: string
 }

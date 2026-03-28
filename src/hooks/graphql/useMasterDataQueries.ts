@@ -67,8 +67,8 @@ export const masterDataKeys = {
   vendors: (skip: number, limit: number, isActive?: boolean) =>
     [...masterDataKeys.all, 'vendors', skip, limit, isActive] as const,
   vendor: (id: string) => [...masterDataKeys.all, 'vendor', id] as const,
-  products: (skip: number, limit: number, categoryId?: string | null, isActive?: boolean) =>
-    [...masterDataKeys.all, 'products', skip, limit, categoryId, isActive] as const,
+  products: (skip: number, limit: number, categoryId?: string | null, isActive?: boolean, itemCodeContains?: string, nameContains?: string) =>
+    [...masterDataKeys.all, 'products', skip, limit, categoryId, isActive, itemCodeContains, nameContains] as const,
   product: (id: string) => [...masterDataKeys.all, 'product', id] as const,
 }
 
@@ -245,20 +245,39 @@ export function useVendor(id: string | null) {
   })
 }
 
+export interface ProductsFilters {
+  categoryId?: string | null
+  isActive?: boolean
+  itemCodeContains?: string
+  nameContains?: string
+  descriptionContains?: string
+  makeContains?: string
+  puUnitId?: string
+  stkUnitId?: string
+  locationInStoreContains?: string
+}
+
 export function useProducts(
   skip = 0,
   limit = 100,
-  categoryId?: string | null,
-  isActive?: boolean
+  filters: ProductsFilters = {}
 ) {
+  const { categoryId, isActive, itemCodeContains, nameContains, descriptionContains, makeContains, puUnitId, stkUnitId, locationInStoreContains } = filters
   return useQuery({
-    queryKey: masterDataKeys.products(skip, limit, categoryId ?? undefined, isActive),
+    queryKey: masterDataKeys.products(skip, limit, categoryId, isActive, itemCodeContains, nameContains),
     queryFn: () =>
       executeGraphQL<{ products: PaginatedList<Product> }>(PRODUCTS, {
         skip,
         limit,
         categoryId: categoryId ?? undefined,
         isActive,
+        itemCodeContains: itemCodeContains ?? undefined,
+        nameContains: nameContains ?? undefined,
+        descriptionContains: descriptionContains ?? undefined,
+        makeContains: makeContains ?? undefined,
+        puUnitId: puUnitId ?? undefined,
+        stkUnitId: stkUnitId ?? undefined,
+        locationInStoreContains: locationInStoreContains ?? undefined,
       }),
     staleTime: stale,
     gcTime: gc,

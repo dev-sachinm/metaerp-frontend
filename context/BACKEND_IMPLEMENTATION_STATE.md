@@ -45,8 +45,9 @@
 - **API Docs**: `http://localhost:8000/docs`
 
 ### Entity enums and sync script
-- **Single source of truth:** `app/entity_enums.py` defines `EntityEnum` (permission-managed entities) and per-entity `*FieldsEnum` (e.g. `UserFieldsEnum`, `RoleFieldsEnum`). The registry (`app/entity_registry.py`) and GraphQL queries `getEnumEntities` / `getEnumFields(entityID)` use these enums.
-- **Sync script:** `python scripts/sync_entity_enums.py` discovers all SQLAlchemy models from the project (classes mapped to `Base`), excludes `entity_permission`, `field_permission`, `refresh_token` (see `EXCLUDED_ENTITIES` in the script), and updates `app/entity_enums.py` in one run (entities + fields). Writes via a temp file then rename so the enum file is not corrupted if the script stops mid-write. No interactive prompts.
+- **Runtime (GraphQL / permissions):** `app/application/services/entity_discovery_service.py` introspects SQLAlchemy models and returns **canonical singular** entity keys via `app.domain.entity_keys.canonical_entity_key` (same rules as `entity_permissions.entity_name` in the DB).
+- **Static file (optional):** `app/domain/enums.py` holds generated `EntityEnum` and per-entity `*FieldsEnum` for typing and tooling. It is **not** what `getEnumEntities` reads at runtime.
+- **Sync script:** `python scripts/sync_entity_enums.py` walks mapped models, applies **canonical singular** keys (plural/legacy class names collapse via `canonical_entity_key`), excludes `entity_permission`, `field_permission`, `refresh_token`, and regenerates `app/domain/enums.py` atomically.
 
 ---
 
@@ -466,7 +467,7 @@ All operations exposed by the schema:
 | `getRoles` | `roleId: String` | `[RoleType!]!` | Get roles. If `roleId` is provided, returns that specific role. Otherwise returns all roles (just role table rows with all fields). Requires read permission on `role` entity. |
 | `getRolePermissions` | `roleId: String!` | `RoleWithPermissionsType` | Get role with all its entity and field permissions. Returns role, entityPermissions (list), and fieldPermissions (list). Requires read permission on `role` entity. |
 | `myPermissions` | — | `PermissionsType` | Current user's permissions grouped by role (`byRole`). `null` if not authenticated. |
-| `entities` | — | `[EntityInfoType!]!` | List ALL entities that CAN have permissions configured (master entity list). Returns entities from master registry (`app/entity_registry.py`), regardless of whether permissions exist. Works even on day one when no permissions exist. Requires read permission on `role` entity. |
+| `entities` | — | `[EntityInfoType!]!` | List ALL entities that CAN have permissions configured (master entity list). Returns entities from **ORM discovery** (`entity_discovery_service` + `app/domain/registry.py` display metadata), regardless of whether permissions exist. Works even on day one when no permissions exist. Requires read permission on `role` entity. |
 | `entityFields` | `entityName: String!` | `[FieldInfoType!]!` | List ALL fields for a given entity that CAN have permissions configured. Uses SQLAlchemy model introspection to discover fields from the entity's model. Works even when no permissions are configured yet. Requires read permission on `role` entity. |
 
 **Master Data (module: master_data; requires `master_data` enabled. All require auth + entity-level permissions.)**
@@ -489,7 +490,10 @@ All operations exposed by the schema:
 | `supplier` | `id: String!` | `SupplierType` | Single supplier by id. `null` if not found. |
 | `vendors` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `VendorListType!` | Paginated vendors (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
 | `vendor` | `id: String!` | `VendorType` | Single vendor by id. `null` if not found. |
-| `products` | `skip: Int = 0`, `limit: Int = 100`, `categoryId: String`, `isActive: Boolean` (optional) | `ProductListType!` | Paginated products (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). Optional filter by `categoryId`. |
+| `products` | `skip: Int = 0`, `limit: Int = 100`, `categoryId: String`, `isActive: Boolean`, `itemCodeContains: String`, `nameContains: String`, `descriptionContains: String`, `makeContains: String`, `puUnitId: String`, `stkUnitId: String`, `locationInStoreContains: String` (all optional) | `ProductListType!` | Paginated products. Text filters (`itemCodeContains`, `nameContains`, `descriptionContains`, `makeContains`, `locationInStoreContains`) are case-insensitive "contains" matches. `puUnitId` / `stkUnitId` filter by exact UOM id. |
+| `product` | `id: String!` | `ProductType` | Single product by id. Includes `itemCode`, `name`, `description`, `make`, `puUnitId`, `stkUnitId`, `procMtd`, `locationInStore`, `quantity`, `isActive`. `null` if not found. |
+| `purchaseOrders` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `PurchaseOrderListType!` | Paginated purchase orders (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
+| `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. Includes `poNumber`, `title`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments`, `poSendDate`, `poStatus`, and audit fields. |
 
 `isActive` behavior for all Master Data list queries:
 - `isActive: true` → only active records
@@ -506,12 +510,19 @@ All operations exposed by the schema:
 | `projectAssignmentBoard` | `projectId: String!` | `ProjectAssignmentBoardType` | Assignment screen payload (project, assignments, assignable users/roles, canAssign). Requires `update` permission on `project_assignment`. |
 | `fixtures` | `projectId: String`, `status: String`, `isActive: Boolean`, `skip: Int = 0`, `limit: Int = 100` | `FixtureListType!` | Paginated fixtures (`items`, `total`, `skip`, `limit`). Item fields: `id`, `projectId`, `fixtureNumber`, `fixtureSeq`, `description`, `status`, `s3BomKey`, `bomFilename`, `bomUploadedAt`, `bomUploadedBy`, `isActive`, audit fields. |
 | `fixture` | `id: String!` | `FixtureType` | Single fixture by id. Same fields as list item. `null` if not found. |
-| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartPartNoContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. If any search arguments are provided, filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part partNo/name/make. `null` if fixture not found. |
+| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). **Persistence:** both lists are backed by the unified table **`fixture_bom`** (`part_type` = `manufactured` \| `standard`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. If any search arguments are provided, filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part itemCode/name/make. `null` if fixture not found. |
 | `getDesignUploadUrl` | `fixtureId: String!`, `filename: String!` | `DesignUploadUrlType` | Get a presigned S3 upload URL for a BOM file (`.xlsx` or `.zip`). Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the file bytes to `uploadUrl` before calling `parseBomFile`. |
-| `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level (legacy).** Parse a previously uploaded BOM file (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `summary`. Now validates fixture number from Excel header, flags drawings outside the declared fixture (`fixtureMismatchCount`). Standard parts include `fixtureSeq`. `summary` includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`. |
+| `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level (legacy).** Parse a previously uploaded BOM file (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `summary`. **BOM column layout:** A=sr_no, B=drawing_no, C=part_number, D=description, E=make, F=qty_lh, G=qty_rh, H=qty, I=unit. **Standard vs manufactured:** a row is standard when C (part_number) AND E (make) are both non-empty; otherwise manufactured. UNIT (col I) is read when present. **Wrong-entry detection (in order):** (1) dimension strings like `20x46 LG` — reason says "looks like a dimension"; (2) drawing number does not start with project number prefix; (3) suffix after prefix is shorter than 7 chars. Each standard part has `similarProducts[]` (up to 5 product master suggestions). `summary` includes `duplicateDrawingCount`. |
 | `getDrawingViewUrl` | `partId: String!` | `DrawingViewUrlType` | Get a presigned GET URL to view/download a manufactured part's drawing file. Returns `viewUrl`, `partId`, `drawingNo`. Raises error if part has no drawing. |
 | `getProjectBomUploadUrl` | `projectId: String!`, `filename: String!` | `ProjectBomUploadUrlType` | **Project-level.** Get a presigned S3 upload URL for a BOM file scoped to a project (no fixture needed). Returns `uploadUrl`, `s3Key`, `projectId`. PUT the file bytes to `uploadUrl`, then call `parseProjectBomFile`. |
 | `parseProjectBomFile` | `projectId: String!`, `s3Key: String!` | `BomParseResultType` | **Project-level.** Parse BOM — fixture number is read from the Excel (cell below the cell containing "fixture"). Validates: (1) fixture number cell exists, (2) drawings belong to the declared fixture. Each manufactured part includes `fixtureSeq`, `fixtureExists`, `existingFixtureId`, `existingFixtureNumber`, `isDuplicateInProject`, `duplicateFixtures`. Each standard part includes `fixtureSeq` (from Excel header, so UI can group standard parts under the correct fixture). Summary includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`, `newFixtureSeqs`, `existingFixtureSeqs`. No DB writes. |
+| `getManufacturedPoUploadUrl` | `fixtureId: String!`, `filename: String!` | `ManufacturedPoUploadUrlType` | Phase 4. Get a presigned S3 upload URL for a **user-edited manufactured PO Excel**. Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the edited Excel bytes to `uploadUrl`, then call `importManufacturedPoExcel(fixtureId, s3Key)`. |
+
+**Email store (module: core; requires auth).**
+
+| Query | Arguments | Returns | Description |
+|-------|-----------|---------|-------------|
+| `emails` | `contextType: String`, `contextId: String` | `[EmailType!]!` | List stored emails for debugging/audit. If `contextType` / `contextId` provided, filters by those fields. |
 
 #### Mutations
 
@@ -530,7 +541,13 @@ All operations exposed by the schema:
 | `addUserRole` | `userId: String!`, `roleId: String!` | `UserType` | Add a role to a user. Requires update permission on `user` entity. |
 | `removeUserRole` | `userId: String!`, `roleId: String!` | `UserType` | Remove a role from a user. Requires update permission on `user` entity. |
 | `upsertRoleWithPermissions` | `name: String!`, `roleId: String`, `description: String`, `entityPermissions: [EntityPermissionInput!]`, `fieldPermissions: [FieldPermissionInput!]` | `RoleWithPermissionsType` | Create or update a role with all its permissions in one transaction. Requires update permission on `role` entity. |
-| `setModuleEnabled` | `moduleId: String!`, `enabled: Boolean!` | `ModuleStatusType` | Enable or disable a module (DB-driven). Requires update permission on `role` entity. |
+| `setModuleEnabled` | `moduleId: String!`, `enabled: Boolean!`, `displayName: String`, `description: String` | `ModuleStatusType` | Enable or disable a module (DB-driven); optionally update display name and description. Requires update permission on `role` entity. |
+
+**Email store (module: core; requires auth).**
+
+| Mutation | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `createEmail` | `input: CreateEmailInput!` (subject, body, toAddress, ccAddress, bccAddress, attachments, contextType, contextId) | `EmailType` | Create an email record with metadata and attachment descriptors. Does **not** send a real email; used by later phases to persist PO / manufacturing emails. Attachments are JSON `{ s3Key, filename }` objects pointing at S3/fake-S3. |
 
 **Master Data (module: master_data; requires `master_data` enabled. All require auth + entity-level permissions.)**
 
@@ -560,9 +577,12 @@ All operations exposed by the schema:
 | `createVendor` | `input: VendorInput!` (name, code, contactPerson, email, phone, address, isActive) | `VendorType` | Create vendor. |
 | `updateVendor` | `id: String!`, `input: VendorInput!` | `VendorType` | Update vendor by id. |
 | `deleteVendor` | `id: String!` | `Boolean!` | Delete vendor by id. |
-| `createProduct` | `input: ProductInput!` (name, categoryId, partNo, description, make, unitId, quantity, isActive) | `ProductType` | Create product. |
-| `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id. |
+| `createProduct` | `input: ProductInput!` (name, categoryId, **itemCode**, description, make, **puUnitId**, **stkUnitId**, **procMtd**, **locationInStore**, quantity, isActive) | `ProductType` | Create product. **itemCode** replaces legacy part number; purchase/stock UOM are **puUnitId** and **stkUnitId** (both optional). |
+| `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id (same fields as create). |
 | `deleteProduct` | `id: String!` | `Boolean!` | Delete product by id. |
+| `createPurchaseOrder` | `input: PurchaseOrderInput!` (title, `poType`=StandardPart|ManufacturedPart, details, vendorId, supplierId, attachments, poSendDate, poStatus, isActive) | `PurchaseOrderType` | Create purchase order header. `poNumber` is auto-generated by backend in format `POYYMMDDNN` (2-digit daily sequence). |
+| `updatePurchaseOrder` | `id: String!`, `input: PurchaseOrderUpdateInput!` | `PurchaseOrderType` | Partial update purchase order by id (only provided fields are updated). Supports `attachmentsToAdd` / `attachmentsToRemove` to modify the stored attachments list (in addition to the legacy `attachments` replace field). |
+| `deletePurchaseOrder` | `id: String!` | `Boolean!` | Delete purchase order by id. |
 
 **Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
 
@@ -576,8 +596,19 @@ All operations exposed by the schema:
 | `createFixture` | `input: CreateFixtureInput!` (projectId, description, status) | `FixtureType` | Create a fixture under a project. `fixtureNumber` and `fixtureSeq` are auto-generated from `project.projectNumber`. Requires `project.projectNumber` to be set. |
 | `updateFixture` | `id: String!`, `input: UpdateFixtureInput!` (description, status, isActive) | `FixtureType` | Update fixture description, status, or active flag. |
 | `deleteFixture` | `id: String!` | `Boolean!` | Hard delete a fixture and all its BOM parts. |
-| `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions, productMatchResolutions) | `FixtureType` | **Fixture-level (legacy).** Commit a parsed BOM file to a specific fixture. Stores manufactured parts, uploads drawing files from ZIP, and links standard parts to Product master. |
-| `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions, productMatchResolutions) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM to the project. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed for the same project) are skipped. Returns the list of affected fixtures. |
+| `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?) | `FixtureType` | **Fixture-level (legacy).** Commit a parsed BOM file to a specific fixture. Atomically replaces all BOM rows. Uploads drawing files from ZIP. **Standard part auto-resolution:** every standard part is always persisted — no skipping. Resolution order: (1) if `productMatchResolutions` has a UUID for the part's `item_code`, link to that product; (2) otherwise look up `products` by `item_code`; (3) if not found, auto-create a new product with a generated `SRBOP-NNNN` item code and link it. `productMatchResolutions` is **optional** — omitting it triggers full auto-resolve for all standard parts. |
+| `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM to the project. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed for the same project) are skipped. Same standard part auto-resolution as `submitBomUpload`: lookup by `item_code` → auto-create `SRBOP-NNNN` if not found. Returns the list of affected fixtures. |
+| `sendManufacturedToVendor` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `EmailType` | Phase 3. Create an Email record + attachments snapshot (Excel + copied drawings) for selected manufactured parts, and sets `vendorId` on those parts. |
+| `exportManufacturedPoExcel` | `fixtureId: String!`, `partIds: [String!]!` | `PoExcelExportType` | Phase 4. Export an **editable PO Excel template** from **`fixture_bom` row ids** (`partIds` = primary keys). Each id must belong to the fixture and have `part_type = manufactured`. Returns `s3Key` + `downloadUrl`. |
+| `importManufacturedPoExcel` | `fixtureId: String!`, `s3Key: String!` | `ImportManufacturedPoResultType` | Phase 4. Import the edited PO Excel and update fields (pending-only). Rejects if any affected part has `status != pending`. Only overwrites non-empty cells. |
+| `createManufacturedPo` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `PurchaseOrderType` | Phase 4. Create a **`purchase_orders`** row (`poType = ManufacturedPart`) with generated PO Excel in `attachments`, from **`fixture_bom` row ids** (`partIds`; each `part_type = manufactured`). Sets `vendorId` on rows and `status = inprogress` (pending-only). |
+| `updateManufacturedStatusBulk` | `fixtureId: String!`, `partIds: [String!]!`, `status: String!` | `Int!` | Phase 5. Bulk status update for manufactured parts in a **single fixture**. Allowed transitions only: `inprogress -> quality_checked`, `quality_checked -> received`. Returns number of updated parts. |
+| `updateManufacturedReceivedQty` | `partId: String!`, `receivedLhQty: Float`, `receivedRhQty: Float` | `BomManufacturedPartType` | Phase 5. Update received LH/RH quantities. Allowed only when current status is `quality_checked` or `received`. Returns the updated part. |
+| `updateStandardPartPurchaseUnitPrice` | `standardPartId: String!`, `purchaseUnitPrice: Float` | `FixtureProductType` | Phase 6. Inline edit: update `purchaseUnitPrice` for a **standard** row in unified table **`fixture_bom`** (`part_type = standard`). |
+| `exportStandardPoExcel` | `fixtureId: String!`, `partIds: [String!]!` | `PoExcelExportType` | Phase 6. Export Standard Parts PO Excel from **`fixture_bom` row ids** (`partIds` = primary keys; each row must have `part_type = standard`). Excel includes: itemCode, description, make, unit, expectedQty, currentStock, purchaseQty (calculated), purchaseUnitPrice, supplierName. |
+| `createStandardPo` | `fixtureId: String!`, `partIds: [String!]!`, `supplierId: String!` | `PurchaseOrderType` | Phase 6. Create a **`purchase_orders`** row (`poType = StandardPart`) with generated PO Excel in `attachments`, from **`fixture_bom` row ids** (`partIds`; each `part_type = standard`), and set `supplierId` on those rows. |
+| `receiveStandardParts` | `receipts: [StandardPartReceiptInput!]!` (productId, receivedQty) | `Int!` | Phase 6. Store receiving: increments `products.quantity += receivedQty` for each receipt entry. Requires `product.update`. Returns number of updated products. |
+| `exportBomViewExcel` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `PoExcelExportType` | Export the current `bomView` dataset into an Excel file with **two sheets**: `Manufactured Parts` and `Standard Parts`. Uses the same filters as `bomView`. Returns `s3Key` + `downloadUrl`. |
 
 **Pagination types:** All list queries return `{ items, total, skip, limit, page, totalPages, hasMore }`.
 
@@ -720,13 +751,51 @@ query GetCustomer($id: String!) {
 }
 # Variables: { "id": "CUSTOMER_UUID" }
 
-# 17. Products list (optional filter by categoryId)
-query {
-  products(skip: 0, limit: 50, categoryId: null, isActive: true) {
-    items { id name categoryId partNo description make unitId unitName quantity isActive }
-    total
+# 17. Products list — all optional filters
+# Text filters: case-insensitive "contains" match
+# puUnitId / stkUnitId: exact UOM id match
+query ListProducts(
+  $skip: Int
+  $limit: Int
+  $categoryId: String
+  $isActive: Boolean
+  $itemCodeContains: String
+  $nameContains: String
+  $descriptionContains: String
+  $makeContains: String
+  $puUnitId: String
+  $stkUnitId: String
+  $locationInStoreContains: String
+) {
+  products(
+    skip: $skip
+    limit: $limit
+    categoryId: $categoryId
+    isActive: $isActive
+    itemCodeContains: $itemCodeContains
+    nameContains: $nameContains
+    descriptionContains: $descriptionContains
+    makeContains: $makeContains
+    puUnitId: $puUnitId
+    stkUnitId: $stkUnitId
+    locationInStoreContains: $locationInStoreContains
+  ) {
+    items {
+      id itemCode name description make
+      puUnitId stkUnitId puUnitName stkUnitName
+      procMtd locationInStore quantity isActive categoryId
+    }
+    total skip limit page totalPages hasMore
   }
 }
+# Example — find all auto-created SRBOP products:
+# { "itemCodeContains": "SRBOP", "isActive": true }
+#
+# Example — find by make:
+# { "makeContains": "SMC" }
+#
+# Example — find by stock unit:
+# { "stkUnitId": "UOM_UUID" }
 
 # ----- Project Management & Design/BOM (require project_management module enabled) -----
 # 18. Projects list
@@ -775,7 +844,7 @@ query BomView(
   $fixtureId: String!,
   $drawingNo: String,
   $drawingDesc: String,
-  $stdPartNo: String,
+  $stdItemCode: String,
   $stdName: String,
   $stdMake: String
 ) {
@@ -783,21 +852,25 @@ query BomView(
     fixtureId: $fixtureId
     drawingNoContains: $drawingNo
     drawingDescriptionContains: $drawingDesc
-    standardPartPartNoContains: $stdPartNo
+    standardPartItemCodeContains: $stdItemCode
     standardPartNameContains: $stdName
     standardPartMakeContains: $stdMake
   ) {
     fixture { id fixtureNumber status bomUploadedAt }
     manufacturedParts {
       id fixtureId srNo drawingNo description qtyLh qtyRh status
+      vendorId vendorName receivedLhQty receivedRhQty
       fixtureSeq unitSeq partSeq drawingFileS3Key
     }
     standardParts {
-      id fixtureId productId srNo unitId
-      partNo productName productMake
+      id fixtureId productId srNo unitId supplierId supplierName
+      itemCode      # Product.itemCode
+      productName productMake
+      uom           # Product master UOM code (stk unit, else pu unit)
       qty           # expected quantity from BOM line item
       currentStock  # Product.quantity from product master
       purchaseQty   # max(0, qty - currentStock) — how many to procure
+      purchaseUnitPrice
     }
   }
 }
@@ -806,7 +879,7 @@ query BomView(
 #   "fixtureId": "FIXTURE_UUID",
 #   "drawingNo": "S25049001",
 #   "drawingDesc": null,
-#   "stdPartNo": "ISO-4762",
+#   "stdItemCode": "ISO-4762",
 #   "stdName": null,
 #   "stdMake": "Unbrako"
 # }
@@ -838,8 +911,8 @@ query {
       duplicateFixtures { id fixtureNumber }
     }
     standardParts {
-      srNo partNumber description make qty unit
-      similarProducts { id partNo name make }
+      srNo itemCode description make qty unit
+      similarProducts { id itemCode name make }
     }
     wrongEntries { rowNum srNo rawValue reason }
     summary { totalManufactured totalStandard wrongEntryCount }
@@ -879,8 +952,8 @@ query ParseProjectBomFile($projectId: String!, $s3Key: String!) {
       fixtureExists existingFixtureId existingFixtureNumber
     }
     standardParts {
-      srNo partNumber description make qty unit fixtureSeq
-      similarProducts { id partNo name make }
+      srNo itemCode description make qty unit fixtureSeq
+      similarProducts { id itemCode name make }
     }
     wrongEntries { rowNum srNo rawValue reason }
   }
@@ -1086,11 +1159,12 @@ mutation {
   createProduct(input: {
     name: "Widget A"
     categoryId: "CATEGORY_UUID"
-    partNo: "WGT-001"
-    unitId: "UOM_UUID"
+    itemCode: "WGT-001"
+    puUnitId: "UOM_UUID"
+    stkUnitId: "UOM_UUID"
     isActive: true
   }) {
-    id name categoryId partNo description make unitId unitName quantity isActive
+    id name categoryId itemCode description make puUnitId stkUnitId puUnitName stkUnitName quantity isActive
   }
 }
 
@@ -1162,23 +1236,33 @@ mutation {
 # 23. Submit BOM upload (after parseBomFile preview)
 # Step 1: getDesignUploadUrl → get uploadUrl + s3Key
 # Step 2: PUT file bytes to uploadUrl
-# Step 3: parseBomFile → review, resolve wrong entries and product matches
+# Step 3: parseBomFile → review, optionally resolve wrong entries
 # Step 4: submitBomUpload
+#
+# Standard part auto-resolution (no productMatchResolutions needed):
+#   - If item_code exists in product master → link to it
+#   - Otherwise → auto-create product with SRBOP-NNNN item code and link
+#
+# productMatchResolutions is OPTIONAL. Provide it only to override auto-resolve
+# and force-link a specific part to a specific existing product.
 mutation {
   submitBomUpload(input: {
     fixtureId: "FIXTURE_UUID"
     s3Key: "bom-uploads/FIXTURE_UUID/BOM.zip"
     filename: "BOM.zip"
+    # wrongEntryResolutions is optional — omit to skip all wrong entries
     wrongEntryResolutions: [
       {
-        originalDrawingNo: "S250490010301"
+        originalDrawingNo: "20x46 LG"
         action: "skip"
       }
     ]
+    # productMatchResolutions is optional — omit for full auto-resolve
+    # Provide only to force-link a part to an existing product
     productMatchResolutions: [
       {
-        partNumber: "BOLT-M12"
-        productId: "PRODUCT_UUID"
+        itemCode: "MGPM63-25Z"
+        productId: "EXISTING_PRODUCT_UUID"
       }
     ]
   }) {
@@ -1191,6 +1275,7 @@ mutation {
 # Step 2: PUT file bytes to uploadUrl
 # Step 3: parseProjectBomFile → review (fixture IDs derived from drawing numbers, duplicates flagged)
 # Step 4: submitProjectBomUpload → auto-creates missing fixtures, skips duplicate drawings
+#         Standard parts are auto-resolved (same logic as submitBomUpload above)
 mutation SubmitProjectBomUpload($input: ProjectBomSubmitInput!) {
   submitProjectBomUpload(input: $input) {
     id fixtureNumber fixtureSeq status s3BomKey bomFilename bomUploadedAt
@@ -1204,13 +1289,54 @@ mutation SubmitProjectBomUpload($input: ProjectBomSubmitInput!) {
 #     "filename": "BOM.zip",
 #     "wrongEntryResolutions": [
 #       { "originalDrawingNo": "20x46 LG", "action": "skip" }
-#     ],
-#     "productMatchResolutions": [
-#       { "partNumber": "ISO-4762-M6x20", "productId": "PRODUCT_UUID" }
 #     ]
+#     // productMatchResolutions omitted → all standard parts auto-resolved
 #   }
 # }
 ```
+
+# 26. List stored emails (for debugging/audit)
+query ListEmails {
+  emails(contextType: "manufacturing_vendor", contextId: "FIXTURE_UUID") {
+    id
+    subject
+    toAddress
+    contextType
+    contextId
+    attachments
+    createdAt
+  }
+}
+
+# 25. Create an email record (no real send yet)
+mutation CreateEmail($input: CreateEmailInput!) {
+  createEmail(input: $input) {
+    id
+    subject
+    toAddress
+    ccAddress
+    bccAddress
+    attachments
+    contextType
+    contextId
+    createdAt
+  }
+}
+# Variables:
+# {
+#   "input": {
+#     "subject": "PO for manufactured parts",
+#     "body": "Please find attached the PO.",
+#     "toAddress": "vendor@example.com",
+#     "ccAddress": null,
+#     "bccAddress": null,
+#     "attachments": [
+#       { "s3Key": "emails/po-123.xlsx", "filename": "PO.xlsx" }
+#     ],
+#     "contextType": "manufacturing_po",
+#     "contextId": "FIXTURE_UUID"
+#   }
+# }
 
 ---
 
@@ -1660,7 +1786,7 @@ query {
 - User doesn't have read permission on `role` entity
 
 **Notes:**
-- Returns ALL entities from the master registry (`app/entity_registry.py`), not just those with permissions
+- Returns ALL entities from **ORM discovery** (same entity keys as `getEnumEntities`), not just those with permissions
 - Works even on day one when no permissions exist - perfect for UI dropdowns!
 - Entities are sorted alphabetically
 - `displayName` and `description` come from the master registry configuration
@@ -3262,17 +3388,17 @@ Then update your Authorization header.
 
 **Core:** `hello`, `getEnumEntities`, `getEnumFields`, `enabledModules`, `currentUser`, `user`, `users`, `getRoles`, `getRolePermissions`, `myPermissions`, `entities`, `entityFields`.
 
-**Project Management & Design/BOM (require module `project_management` enabled):** `projects`, `project`, `projectAssignments`, `projectAssignmentBoard`, `fixtures`, `fixture`, `bomView`, `getDesignUploadUrl`, `parseBomFile`, `getDrawingViewUrl`, `getProjectBomUploadUrl`, `parseProjectBomFile`.
+**Project Management & Design/BOM (require module `project_management` enabled):** `projects`, `project`, `projectAssignments`, `projectAssignmentBoard`, `fixtures`, `fixture`, `bomView`, `getDesignUploadUrl`, `parseBomFile`, `getDrawingViewUrl`, `getProjectBomUploadUrl`, `parseProjectBomFile`, `getManufacturedPoUploadUrl`.
 
-**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`.
+**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`, `purchaseOrders`, `purchaseOrder`.
 
 ✅ **Mutations (single source of truth: this document)**
 
 **Core:** `login`, `refresh`, `createUser`, `updateUser`, `changePassword`, `setUserPassword`, `deleteUser`, `deleteRole`, `addUserRole`, `removeUserRole`, `upsertRoleWithPermissions`, `setModuleEnabled`.
 
-**Project Management & Design/BOM (require module `project_management` enabled):** `createProject`, `updateProject`, `deleteProject`, `assignProjectPrincipal`, `removeProjectPrincipal`, `createFixture`, `updateFixture`, `deleteFixture`, `submitBomUpload`, `submitProjectBomUpload`.
+**Project Management & Design/BOM (require module `project_management` enabled):** `createProject`, `updateProject`, `deleteProject`, `assignProjectPrincipal`, `removeProjectPrincipal`, `createFixture`, `updateFixture`, `deleteFixture`, `submitBomUpload`, `submitProjectBomUpload`, `sendManufacturedToVendor`, `exportManufacturedPoExcel`, `importManufacturedPoExcel`, `createManufacturedPo`, `updateManufacturedStatusBulk`, `updateManufacturedReceivedQty`, `updateStandardPartPurchaseUnitPrice`, `exportStandardPoExcel`, `createStandardPo`, `exportBomViewExcel`.
 
-**Master Data (require module `master_data` enabled):** `createProductCategory`, `updateProductCategory`, `deleteProductCategory`, `createCustomer`, `updateCustomer`, `deleteCustomer`, `createUOM`, `updateUOM`, `deleteUOM`, `createTax`, `updateTax`, `deleteTax`, `createPaymentTerm`, `updatePaymentTerm`, `deletePaymentTerm`, `createExpenseCategory`, `updateExpenseCategory`, `deleteExpenseCategory`, `createSupplier`, `updateSupplier`, `deleteSupplier`, `createVendor`, `updateVendor`, `deleteVendor`, `createProduct`, `updateProduct`, `deleteProduct`.
+**Master Data (require module `master_data` enabled):** `createProductCategory`, `updateProductCategory`, `deleteProductCategory`, `createCustomer`, `updateCustomer`, `deleteCustomer`, `createUOM`, `updateUOM`, `deleteUOM`, `createTax`, `updateTax`, `deleteTax`, `createPaymentTerm`, `updatePaymentTerm`, `deletePaymentTerm`, `createExpenseCategory`, `updateExpenseCategory`, `deleteExpenseCategory`, `createSupplier`, `updateSupplier`, `deleteSupplier`, `createVendor`, `updateVendor`, `deleteVendor`, `createProduct`, `updateProduct`, `deleteProduct`, `createPurchaseOrder`, `updatePurchaseOrder`, `deletePurchaseOrder`, `receiveStandardParts`.
 
 ✅ **Key Features**
 - JWT authentication (1h access, 7d refresh). Login is **username-based** (not email).

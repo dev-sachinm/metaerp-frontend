@@ -132,11 +132,15 @@ export interface Product {
   id: string
   name: string
   categoryId: string | null
-  partNo: string | null
+  itemCode: string | null
   description: string | null
   make: string | null
-  unitId: string | null
-  unitName?: string | null
+  puUnitId: string | null
+  stkUnitId: string | null
+  puUnitName?: string | null
+  stkUnitName?: string | null
+  procMtd?: string | null
+  locationInStore?: string | null
   quantity: number | null
   isActive: boolean
   createdBy?: string | null

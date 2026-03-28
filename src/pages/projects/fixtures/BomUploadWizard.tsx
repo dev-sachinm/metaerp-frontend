@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -18,9 +18,9 @@ import {
 } from 'lucide-react'
 import {
   fetchProjectBomUploadUrl,
-  fetchParseProjectBomFile,
   useSubmitProjectBomUpload,
 } from '@/hooks/graphql/useDesign'
+import { fetchParseProjectBomFile } from '@/hooks/graphql/useDesignItemCode'
 import type {
   ParsedBom,
   ParsedManufacturedPart,
@@ -186,15 +186,27 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
   const [wrongResolutions, setWrongResolutions] = useState<Record<string, WrongEntryResolution>>({})
   const [productMatches, setProductMatches] = useState<Record<string, string>>({})
 
-  // Fetch on mount
-  useState(() => {
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
     fetchParseProjectBomFile(projectId, s3Key)
-      .then((b) => { setParsed(b); setLoading(false) })
-      .catch((e: unknown) => {
-        setLoadError(e instanceof Error ? e.message : 'Failed to parse BOM')
-        setLoading(false)
+      .then((b) => {
+        if (!cancelled) {
+          setParsed(b)
+          setLoading(false)
+        }
       })
-  })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : 'Failed to parse BOM')
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, s3Key])
 
   const wrongEntryDrawings = (parsed?.manufacturedParts ?? []).filter((p) => p.isWrongEntry).map((p) => p.drawingNo)
   const unresolvedCount = wrongEntryDrawings.filter((d) => {
@@ -205,17 +217,6 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
     return true
   }).length
   const canProceed = unresolvedCount === 0
-
-  const handleNext = () => {
-    const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
-    // Send ALL standard parts — include user-selected productId where available,
-    // empty string for unmatched (backend will store the part without a product link).
-    const pm: ProductMatchResolution[] = standardParts.map((p) => ({
-      partNumber: p.partNumber,
-      productId: productMatches[p.partNumber] ?? '',
-    }))
-    onDone(wr, pm)
-  }
 
   if (loading) {
     return (
@@ -238,6 +239,18 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
   }
 
   const { summary, manufacturedParts, standardParts, wrongEntries } = parsed
+
+  const handleNext = () => {
+    const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
+    // Send ALL standard parts — include user-selected productId where available,
+    // empty string for unmatched (backend will store the part without a product link).
+    const pm: ProductMatchResolution[] = standardParts.map((p) => ({
+      itemCode: p.itemCode,
+      productId: productMatches[p.itemCode] ?? '',
+    }))
+    onDone(wr, pm)
+  }
+
   const duplicateCount = summary.duplicateDrawingCount ?? 0
   const newFixtures = summary.newFixtureSeqs ?? []
   const existingFixtures = summary.existingFixtureSeqs ?? []
@@ -407,7 +420,8 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
             {standardParts.map((p: ParsedStandardPart, i) => (
               <div key={i} className="px-3 py-2 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-slate-500">{p.partNumber}</span>
+                  <span className="font-mono text-xs text-slate-500">{p.drawingNo}</span>
+                  <span className="font-mono text-xs text-indigo-600 ml-1">{p.itemCode}</span>
                   <span className="text-slate-800 flex-1">{p.description}</span>
                   <span className="text-xs text-slate-400 shrink-0">qty: {p.qty}</span>
                 </div>
@@ -416,22 +430,22 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                     <Label className="text-xs shrink-0 text-slate-500">Match:</Label>
                     <select
                       className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      value={productMatches[p.partNumber] ?? ''}
+                      value={productMatches[p.itemCode] ?? ''}
                       onChange={(e) =>
-                        setProductMatches((prev) => ({ ...prev, [p.partNumber]: e.target.value }))
+                        setProductMatches((prev) => ({ ...prev, [p.itemCode]: e.target.value }))
                       }
                     >
-                      <option value="">— skip for now —</option>
+                      <option value="">— auto-resolve (will create/match product) —</option>
                       {p.similarProducts.map((sp) => (
                         <option key={sp.id} value={sp.id}>
-                          {sp.partNo ?? sp.id} — {sp.name}{sp.make ? ` (${sp.make})` : ''}
+                          {sp.itemCode ?? sp.id} — {sp.name}{sp.make ? ` (${sp.make})` : ''}
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
                 {p.similarProducts.length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No matching products found — will be skipped.</p>
+                  <p className="text-xs text-slate-400 italic">No suggestions — backend will auto-match by item code or create a new SRBOP-NNNN product.</p>
                 )}
               </div>
             ))}
@@ -515,10 +529,12 @@ function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, produ
         <div className="px-4 py-2.5 flex justify-between">
           <span className="text-slate-500">Standard parts</span>
           <span className="font-medium">
-            {productMatchResolutions.filter(r => !!r.productId).length} matched
+            {productMatchResolutions.filter(r => !!r.productId).length > 0
+                ? `${productMatchResolutions.filter(r => !!r.productId).length} overridden`
+                : 'all auto-resolved'}
             {productMatchResolutions.filter(r => !r.productId).length > 0 && (
               <span className="text-slate-400 ml-1">
-                / {productMatchResolutions.filter(r => !r.productId).length} unmatched
+                / {productMatchResolutions.filter(r => !r.productId).length} auto-resolve
               </span>
             )}
           </span>

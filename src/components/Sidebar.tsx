@@ -65,7 +65,7 @@ function NavItem({ to, icon, label, isCollapsed, badge }: NavItemProps) {
 }
 
 /** Icon components for nav config */
-const NAV_ICONS: Record<NavItemConfig['icon'] | undefined, React.ReactNode> = {
+const NAV_ICONS: Record<NonNullable<NavItemConfig['icon']>, React.ReactNode> = {
   dashboard: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -89,6 +89,11 @@ const NAV_ICONS: Record<NavItemConfig['icon'] | undefined, React.ReactNode> = {
   project: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2zm2 8h8m-8 4h5" />
+    </svg>
+  ),
+  email: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
     </svg>
   ),
 }
@@ -227,7 +232,7 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           <NavItem
             key={item.path}
             to={item.path}
-            icon={NAV_ICONS[item.icon]}
+            icon={item.icon ? NAV_ICONS[item.icon] : null}
             label={item.label}
             isCollapsed={isCollapsed}
           />
