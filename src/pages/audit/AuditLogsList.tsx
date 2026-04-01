@@ -30,6 +30,8 @@ const AUDIT_LOGS_QUERY = `
     $newValueContains: String
     $fromDate: String
     $toDate: String
+    $requestId: String
+    $source: String
   ) {
     auditLogs(
       page: $page
@@ -43,11 +45,14 @@ const AUDIT_LOGS_QUERY = `
       newValueContains: $newValueContains
       fromDate: $fromDate
       toDate: $toDate
+      requestId: $requestId
+      source: $source
     ) {
       total page totalPages hasMore firstPage lastPage
       items {
         id timestamp userId userName action
         entityName entityId entityLabel ipAddress
+        requestId userAgent source
         changes { field oldValue newValue }
       }
     }
@@ -60,6 +65,7 @@ interface AuditLog {
   id: string; timestamp: string; userId: string; userName: string
   action: string; entityName: string; entityId: string
   entityLabel?: string | null; ipAddress?: string | null
+  requestId?: string | null; userAgent?: string | null; source?: string | null
   changes?: AuditChange[] | null
 }
 interface AuditLogList {
@@ -85,50 +91,58 @@ const ACTION_STYLE: Record<string, string> = {
   PERMISSION_CHANGE: 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-// ── Expanded row — shows changes table ────────────────────────────────────────
-function ChangesRow({ changes }: { changes: AuditChange[] }) {
-  if (!changes.length) return <p className="text-xs text-slate-400 italic">No field changes recorded.</p>
+// ── Expanded row — shows metadata and changes table ───────────────────────────
+function ExpandedDetails({ log }: { log: AuditLog }) {
+  const changes = log.changes ?? []
   return (
-    <table className="w-full text-xs border-collapse">
-      <thead>
-        <tr className="bg-slate-50">
-          <th className="text-left py-1 px-2 font-medium text-slate-500 w-1/4">Field</th>
-          <th className="text-left py-1 px-2 font-medium text-slate-500 w-[37.5%]">Old value</th>
-          <th className="text-left py-1 px-2 font-medium text-slate-500 w-[37.5%]">New value</th>
-        </tr>
-      </thead>
-      <tbody>
-        {changes.map((c, i) => (
-          <tr key={i} className="border-t border-slate-100">
-            <td className="py-1 px-2 font-mono text-slate-600">{c.field}</td>
-            <td className="py-1 px-2 text-red-600 font-mono line-through opacity-70 max-w-[260px] truncate"
-              title={c.oldValue ?? ''}>{c.oldValue ?? <span className="text-slate-300 no-underline">—</span>}</td>
-            <td className="py-1 px-2 text-green-700 font-mono max-w-[260px] truncate"
-              title={c.newValue ?? ''}>{c.newValue ?? <span className="text-slate-300">—</span>}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-3 px-1">
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 bg-white p-2.5 rounded-md border border-slate-200 shadow-sm">
+        <div><span className="font-semibold text-slate-500">Request ID:</span> <span className="font-mono ml-1">{log.requestId || '—'}</span></div>
+        <div><span className="font-semibold text-slate-500">User Agent:</span> <span className="ml-1">{log.userAgent || '—'}</span></div>
+      </div>
+      {changes.length > 0 ? (
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="text-left py-1.5 px-2 font-medium text-slate-500 w-1/4 rounded-tl-md">Field</th>
+              <th className="text-left py-1.5 px-2 font-medium text-slate-500 w-[37.5%]">Old value</th>
+              <th className="text-left py-1.5 px-2 font-medium text-slate-500 w-[37.5%] rounded-tr-md">New value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {changes.map((c, i) => (
+              <tr key={i} className="border-t border-slate-100">
+                <td className="py-1.5 px-2 font-mono text-slate-600">{c.field}</td>
+                <td className="py-1.5 px-2 text-red-600 font-mono line-through opacity-70 max-w-[260px] truncate"
+                  title={c.oldValue ?? ''}>{c.oldValue ?? <span className="text-slate-300 no-underline">—</span>}</td>
+                <td className="py-1.5 px-2 text-green-700 font-mono max-w-[260px] truncate"
+                  title={c.newValue ?? ''}>{c.newValue ?? <span className="text-slate-300">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-xs text-slate-400 italic px-2">No field changes recorded.</p>
+      )}
+    </div>
   )
 }
 
 // ── Log row ───────────────────────────────────────────────────────────────────
 function LogRow({ log }: { log: AuditLog }) {
   const [expanded, setExpanded] = useState(false)
-  const hasChanges = (log.changes?.length ?? 0) > 0
 
   return (
     <>
       <TableRow
-        className={hasChanges ? 'cursor-pointer hover:bg-slate-50' : 'hover:bg-slate-50/40'}
-        onClick={() => hasChanges && setExpanded(v => !v)}
+        className="cursor-pointer hover:bg-slate-50"
+        onClick={() => setExpanded(v => !v)}
       >
         <TableCell className="py-2 pr-1 w-6">
-          {hasChanges ? (
-            expanded
-              ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-              : <ChevronRightSm className="h-3.5 w-3.5 text-slate-400" />
-          ) : <span className="w-3.5 inline-block" />}
+          {expanded
+            ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            : <ChevronRightSm className="h-3.5 w-3.5 text-slate-400" />
+          }
         </TableCell>
         <TableCell className="text-xs text-slate-500 whitespace-nowrap">
           {new Date(log.timestamp).toLocaleString()}
@@ -144,13 +158,14 @@ function LogRow({ log }: { log: AuditLog }) {
           {log.entityLabel ?? <span className="font-mono text-slate-400">{log.entityId.slice(0, 8)}…</span>}
         </TableCell>
         <TableCell className="text-xs text-slate-400">{log.changes?.length ?? 0}</TableCell>
+        <TableCell className="text-xs text-slate-500">{log.source ?? '—'}</TableCell>
         <TableCell className="text-xs text-slate-300 font-mono">{log.ipAddress ?? '—'}</TableCell>
       </TableRow>
-      {expanded && hasChanges && (
+      {expanded && (
         <TableRow className="bg-slate-50/70">
           <TableCell />
-          <TableCell colSpan={7} className="pb-3 pt-1">
-            <ChangesRow changes={log.changes!} />
+          <TableCell colSpan={8} className="pb-3 pt-2">
+            <ExpandedDetails log={log} />
           </TableCell>
         </TableRow>
       )}
@@ -173,24 +188,28 @@ export function AuditLogsList() {
   const [fNewVal,    setFNewVal]    = useState('')
   const [fFrom,      setFFrom]      = useState('')
   const [fTo,        setFTo]        = useState('')
+  const [fRequestId, setFRequestId] = useState('')
+  const [fSource,    setFSource]    = useState('')
 
-  const dbUser   = useDebounce(fUser,   350)
-  const dbEntity = useDebounce(fEntity, 350)
-  const dbField  = useDebounce(fField,  350)
-  const dbOld    = useDebounce(fOldVal, 350)
-  const dbNew    = useDebounce(fNewVal, 350)
+  const dbUser      = useDebounce(fUser,      350)
+  const dbEntity    = useDebounce(fEntity,    350)
+  const dbField     = useDebounce(fField,     350)
+  const dbOld       = useDebounce(fOldVal,    350)
+  const dbNew       = useDebounce(fNewVal,    350)
+  const dbRequestId = useDebounce(fRequestId, 350)
+  const dbSource    = useDebounce(fSource,    350)
 
   const resetPage = () => setPage(1)
-  const hasFilters = !!(fUser || fAction || fEntity || fEntityId || fField || fOldVal || fNewVal || fFrom || fTo)
+  const hasFilters = !!(fUser || fAction || fEntity || fEntityId || fField || fOldVal || fNewVal || fFrom || fTo || fRequestId || fSource)
 
   const clearAll = () => {
     setFUser(''); setFAction(''); setFEntity(''); setFEntityId('')
     setFField(''); setFOldVal(''); setFNewVal('')
-    setFFrom(''); setFTo(''); setPage(1)
+    setFFrom(''); setFTo(''); setFRequestId(''); setFSource(''); setPage(1)
   }
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['auditLogs', page, pageSize, dbUser, fAction, dbEntity, fEntityId, dbField, dbOld, dbNew, fFrom, fTo],
+    queryKey: ['auditLogs', page, pageSize, dbUser, fAction, dbEntity, fEntityId, dbField, dbOld, dbNew, fFrom, fTo, dbRequestId, dbSource],
     queryFn: () => executeGraphQL<{ auditLogs: AuditLogList }>(AUDIT_LOGS_QUERY, {
       page, pageSize,
       userNameContains:  dbUser   || undefined,
@@ -202,6 +221,8 @@ export function AuditLogsList() {
       newValueContains:  dbNew   || undefined,
       fromDate:          fFrom   || undefined,
       toDate:            fTo     || undefined,
+      requestId:         dbRequestId || undefined,
+      source:            dbSource || undefined,
     }),
     staleTime: 15 * 1000,
   })
@@ -338,6 +359,20 @@ export function AuditLogsList() {
             </div>
           </div>
 
+          {/* Row 3: Metadata search */}
+          <div className="flex flex-wrap gap-3 px-4 py-3 items-end">
+            <div className="flex flex-col gap-1 min-w-[140px]">
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Request ID</label>
+              <Input value={fRequestId} onChange={e => { setFRequestId(e.target.value); resetPage() }}
+                placeholder="UUID…" className="h-9 text-sm font-mono w-48" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Source</label>
+              <Input value={fSource} onChange={e => { setFSource(e.target.value); resetPage() }}
+                placeholder="e.g. web, api" className="h-9 text-sm w-40" />
+            </div>
+          </div>
+
           {/* Active filter chips */}
           {hasFilters && (
             <div className="flex flex-wrap gap-1.5 px-4 py-2 bg-slate-50/60">
@@ -351,6 +386,8 @@ export function AuditLogsList() {
                 fNewVal && { label: `New → ${fNewVal}`, clear: () => { setFNewVal(''); resetPage() } },
                 fFrom && { label: `From: ${fFrom}`, clear: () => { setFFrom(''); resetPage() } },
                 fTo && { label: `To: ${fTo}`, clear: () => { setFTo(''); resetPage() } },
+                fRequestId && { label: `Req: ${fRequestId.slice(0,8)}…`, clear: () => { setFRequestId(''); resetPage() } },
+                fSource && { label: `Source: ${fSource}`, clear: () => { setFSource(''); resetPage() } },
               ].filter(Boolean).map((chip, i) => (
                 chip && <button key={i} type="button" onClick={chip.clear}
                   className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2.5 py-0.5 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
@@ -405,6 +442,7 @@ export function AuditLogsList() {
                         <TableHead>Entity</TableHead>
                         <TableHead>Record</TableHead>
                         <TableHead className="text-center">Changes</TableHead>
+                        <TableHead>Source</TableHead>
                         <TableHead>IP</TableHead>
                       </TableRow>
                     </TableHeader>

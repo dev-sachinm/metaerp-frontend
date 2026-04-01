@@ -14,7 +14,7 @@ export interface NavItemConfig {
   /** If set, user must have THIS specific action (not just any) on the entity */
   requiredAction?: 'create' | 'read' | 'update' | 'delete' | 'list'
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit' | 'purchase_order'
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -53,6 +53,13 @@ export const NAV_ITEMS: NavItemConfig[] = [
     icon: 'project',
   },
   {
+    moduleId: 'master_data',
+    entity: 'purchase_order',
+    path: '/purchase-orders',
+    label: 'Purchase Orders',
+    icon: 'purchase_order',
+  },
+  {
     moduleId: 'core',
     entity: 'audit_log',
     requiredAction: 'delete',
@@ -82,6 +89,9 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/master/expense-categories': 'master_data',
   '/master/suppliers': 'master_data',
   '/master/vendors': 'master_data',
+  '/purchase-orders': 'master_data',
+  '/purchase-orders/:id/view': 'master_data',
+  '/purchase-orders/:id/edit': 'master_data',
   '/projects': 'project_management',
   '/projects/:id/assignment': 'project_management',
   '/emails': 'core',
@@ -96,6 +106,7 @@ export function getModuleIdForPath(pathname: string): string | null {
   if (normalized.startsWith('/users')) return 'core'
   if (normalized.startsWith('/roles')) return 'core'
   if (normalized.startsWith('/master')) return 'master_data'
+  if (normalized.startsWith('/purchase-orders')) return 'master_data'
   if (normalized.startsWith('/projects')) return 'project_management'
   if (normalized.startsWith('/audit-logs')) return 'core'
   return null

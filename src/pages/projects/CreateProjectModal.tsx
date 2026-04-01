@@ -20,7 +20,7 @@ import { useCustomers } from '@/hooks/graphql/useMasterDataQueries'
 import { getErrorMessage } from '@/lib/graphqlErrors'
 
 function CustomerSelect({ field, inputCls }: { field: { value: string; onChange: (v: string) => void }; inputCls: string }) {
-  const { data, isLoading } = useCustomers(0, 500, true)
+  const { data, isLoading } = useCustomers(1, 500, { isActive: true })
   const customers = data?.customers?.items ?? []
   return (
     <div>

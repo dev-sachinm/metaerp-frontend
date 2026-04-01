@@ -38,7 +38,7 @@ export const GET_BOM_VIEW = `
     ) {
       fixture { id fixtureNumber status }
       manufacturedParts {
-        id fixtureId drawingNo description qty lhRh unitPrice status productId
+        id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
         vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
       }
@@ -50,6 +50,7 @@ export const GET_BOM_VIEW = `
         currentStock
         purchaseQty
         purchaseUnitPrice
+        fixtureSeq unitSeq partSeq
       }
     }
   }

@@ -24,6 +24,7 @@ import type {
   ParsedBom,
   ParsedManufacturedPart,
   ParsedStandardPart,
+  QuantityCorrection,
   WrongEntryResolution,
 } from '@/types/design'
 
@@ -172,7 +173,7 @@ function Step1Upload({ projectId, onDone }: Step1Props) {
 interface Step2Props {
   projectId: string
   s3Key: string
-  onDone: (wr: WrongEntryResolution[]) => void
+  onDone: (wr: WrongEntryResolution[], qc: QuantityCorrection[]) => void
   onBack: () => void
 }
 
@@ -182,6 +183,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
   const [loadError, setLoadError] = useState('')
 
   const [wrongResolutions, setWrongResolutions] = useState<Record<string, WrongEntryResolution>>({})
+  const [qtyOverrides, setQtyOverrides] = useState<Record<string, number>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -240,8 +242,13 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
 
   const handleNext = () => {
     const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
-    // productMatchResolutions omitted — backend auto-resolves SRBOP parts
-    onDone(wr)
+    const qc: QuantityCorrection[] = Object.entries(qtyOverrides)
+      .filter(([drawingNo, qty]) => {
+        const original = manufacturedParts.find((p) => p.drawingNo === drawingNo)
+        return original && qty !== (original.qty ?? 0)
+      })
+      .map(([drawingNo, qty]) => ({ drawingNo, qty }))
+    onDone(wr, qc)
   }
 
   const duplicateCount = summary.duplicateDrawingCount ?? 0
@@ -392,10 +399,35 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
-                  {p.qty != null ? `qty:${p.qty}` : ''}
-                  {p.lhRh ? ` (${p.lhRh})` : ''}
-                </span>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  {!isDupe && !isSkipped && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-slate-400">qty:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className={`w-14 text-xs text-right border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                          (qtyOverrides[p.drawingNo] ?? p.qty ?? 0) === 0
+                            ? 'border-amber-400 bg-amber-50 text-amber-700'
+                            : 'border-slate-200 text-slate-700'
+                        }`}
+                        value={qtyOverrides[p.drawingNo] ?? p.qty ?? 0}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value)
+                          setQtyOverrides((prev) => ({
+                            ...prev,
+                            [p.drawingNo]: isNaN(val) ? 0 : val,
+                          }))
+                        }}
+                      />
+                    </div>
+                  )}
+                  {(isDupe || isSkipped) && p.qty != null && (
+                    <span className="text-xs text-slate-400">qty:{p.qty}</span>
+                  )}
+                  {p.lhRh && <span className="text-xs text-slate-400">({p.lhRh})</span>}
+                </div>
               </div>
             )})}
           </div>
@@ -428,11 +460,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                   </div>
                 </div>
                 <div className="shrink-0 mt-0.5">
-                  {p.productFound ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
-                      ✓ Linked
-                    </span>
-                  ) : (
+                  {!p.productFound && (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
                       ✗ Not in master
                     </span>
@@ -492,11 +520,12 @@ interface Step3Props {
   s3Key: string
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
+  quantityCorrections: QuantityCorrection[]
   onSuccess: () => void
   onBack: () => void
 }
 
-function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, onSuccess, onBack }: Step3Props) {
+function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, quantityCorrections, onSuccess, onBack }: Step3Props) {
   const submit = useSubmitProjectBomUpload(projectId)
 
   const handleSubmit = async () => {
@@ -505,6 +534,7 @@ function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, onSuc
       s3Key,
       filename,
       wrongEntryResolutions,
+      ...(quantityCorrections.length > 0 ? { quantityCorrections } : {}),
     })
     onSuccess()
   }
@@ -521,17 +551,12 @@ function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, onSuc
           <span className="font-medium">{wrongEntryResolutions.length}</span>
         </div>
         <div className="px-4 py-2.5 flex justify-between">
+          <span className="text-slate-500">Quantity corrections</span>
+          <span className="font-medium">{quantityCorrections.length}</span>
+        </div>
+        <div className="px-4 py-2.5 flex justify-between">
           <span className="text-slate-500">Standard parts</span>
-          <span className="font-medium">
-            {productMatchResolutions.filter(r => !!r.productId).length > 0
-                ? `${productMatchResolutions.filter(r => !!r.productId).length} overridden`
-                : 'all auto-resolved'}
-            {productMatchResolutions.filter(r => !r.productId).length > 0 && (
-              <span className="text-slate-400 ml-1">
-                / {productMatchResolutions.filter(r => !r.productId).length} auto-resolve
-              </span>
-            )}
-          </span>
+          <span className="font-medium">Auto-resolved from products master</span>
         </div>
       </div>
 
@@ -545,6 +570,20 @@ function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, onSuc
                   ? <span className="text-slate-400">Skip: <span className="font-mono">{r.originalDrawingNo}</span></span>
                   : <span className="text-indigo-600">Override <span className="font-mono">{r.originalDrawingNo}</span> → <span className="font-mono">{r.correctedDrawingNo}</span></span>
                 }
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {quantityCorrections.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Quantity Corrections</p>
+          <ul className="text-xs space-y-0.5 text-slate-600">
+            {quantityCorrections.map((qc, i) => (
+              <li key={i} className="flex items-center gap-2">
+                <span className="font-mono">{qc.drawingNo}</span>
+                <span className="text-indigo-600 font-medium">→ qty: {qc.qty}</span>
               </li>
             ))}
           </ul>
@@ -582,14 +621,16 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
   const [s3Key, setS3Key] = useState('')
   const [filename, setFilename] = useState('')
   const [wrongResolutions, setWrongResolutions] = useState<WrongEntryResolution[]>([])
+  const [quantityCorrections, setQuantityCorrections] = useState<QuantityCorrection[]>([])
   const handleStep1Done = (key: string) => {
     setS3Key(key)
     setFilename(key.split('/').pop() ?? key)
     setStep(1)
   }
 
-  const handleStep2Done = (wr: WrongEntryResolution[]) => {
+  const handleStep2Done = (wr: WrongEntryResolution[], qc: QuantityCorrection[]) => {
     setWrongResolutions(wr)
+    setQuantityCorrections(qc)
     setStep(2)
   }
 
@@ -624,6 +665,7 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
               s3Key={s3Key}
               filename={filename}
               wrongEntryResolutions={wrongResolutions}
+              quantityCorrections={quantityCorrections}
               onSuccess={onClose}
               onBack={() => setStep(1)}
             />

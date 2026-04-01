@@ -25,3 +25,31 @@ export const CREATE_STANDARD_PO = `
     }
   }
 `
+
+export const CREATE_PURCHASE_ORDER = `
+  mutation CreatePurchaseOrder($input: PurchaseOrderInput!) {
+    createPurchaseOrder(input: $input) {
+      id
+      poNumber
+      title
+      poType
+    }
+  }
+`
+
+export const UPDATE_PURCHASE_ORDER = `
+  mutation UpdatePurchaseOrder($id: String!, $input: PurchaseOrderUpdateInput!) {
+    updatePurchaseOrder(id: $id, input: $input) {
+      id
+      poNumber
+      title
+      poType
+    }
+  }
+`
+
+export const DELETE_PURCHASE_ORDER = `
+  mutation DeletePurchaseOrder($id: String!) {
+    deletePurchaseOrder(id: $id)
+  }
+`

@@ -507,8 +507,10 @@ All operations exposed by the schema:
 | `products` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `categoryId: String`, `itemCodeContains: String`, `nameContains: String`, `descriptionContains: String`, `makeContains: String`, `puUnitId: String`, `stkUnitId: String`, `locationInStoreContains: String` | `ProductListType!` | Page-based products. All text filters are case-insensitive "contains". `puUnitId`/`stkUnitId` = exact UOM id match. Response: `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `product` | `id: String!` | `ProductType` | Single product by id. Includes `itemCode`, `name`, `description`, `make`, `puUnitId`, `stkUnitId`, `procMtd`, `locationInStore`, `quantity`, `isActive`. `null` if not found. |
 | `purchaseOrders` | `skip: Int = 0`, `limit: Int = 100`, `isActive: Boolean` (optional) | `PurchaseOrderListType!` | Paginated purchase orders (`items`, `total`, `id`, `skip`, `limit`, `page`, `totalPages`, `hasMore`). |
-| `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. Includes `poNumber`, `title`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments`, `poSendDate`, `poStatus`, and audit fields. |
-| `auditLogs` | `page: Int = 1`, `pageSize: Int = 20`, `userId: String`, `userNameContains: String`, `action: String`, `entityName: String`, `entityId: String`, `fieldName: String`, `oldValueContains: String`, `newValueContains: String`, `fromDate: String`, `toDate: String` | `AuditLogListType!` | Paginated audit trail. Returns field-level change history. Permission: `audit_log.read`. See [Audit Trail](#audit-trail) section. |
+| `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. Includes `poNumber`, `title`, `poType`, `projectId`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments`, `poSendDate`, `poStatus`, `lineItems`, and audit fields. `lineItems` returns `PurchaseOrderLineItemType` which includes fields from `fixture_bom` (`drawingNumber`, `bomDescription`, `quantity`, `purchaseUnitPrice`, `status`, `lhRh`, `receivedQuantity`). |
+| `exportPurchaseOrderLineItemsCsv`, `getPurchaseOrderAttachmentUploadUrl` | `id: String!` | `String` | Export the line items of a purchase order to a CSV string. |
+| `getPurchaseOrderAttachmentUploadUrl` | `poId: String!`, `filename: String!` | `PurchaseOrderAttachmentUploadUrlType` | Get a presigned URL for uploading a generic attachment to a purchase order. Returns `uploadUrl`, `s3Key`, and `poId`. |
+| `auditLogs` | `page: Int = 1`, `pageSize: Int = 20`, `userId: String`, `userNameContains: String`, `action: String`, `entityName: String`, `entityId: String`, `requestId: String`, `source: String`, `fieldName: String`, `oldValueContains: String`, `newValueContains: String`, `fromDate: String`, `toDate: String` | `AuditLogListType!` | Paginated audit trail. Returns field-level change history with request context (IP, user agent, source, request correlation ID). Permission: `audit_log.read`. See [Audit Trail](#audit-trail) section. |
 
 `isActive` behavior for all Master Data list queries:
 - `isActive: true` → only active records
@@ -541,12 +543,12 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `projectAssignmentBoard` | `projectId: String!` | `ProjectAssignmentBoardType` | Assignment screen payload (project, assignments, assignable users/roles, canAssign). Requires `update` permission on `project_assignment`. |
 | `fixtures` | `projectId: String`, `status: String`, `isActive: Boolean`, `skip: Int = 0`, `limit: Int = 100` | `FixtureListType!` | Paginated fixtures (`items`, `total`, `skip`, `limit`). Item fields: `id`, `projectId`, `fixtureNumber`, `fixtureSeq`, `description`, `status`, `s3BomKey`, `bomFilename`, `bomUploadedAt`, `bomUploadedBy`, `isActive`, audit fields. |
 | `fixture` | `id: String!` | `FixtureType` | Single fixture by id. Same fields as list item. `null` if not found. |
-| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). **Persistence:** both lists are backed by the unified table **`fixture_bom`** (`part_type` = `manufactured` \| `standard`). Both lists are ordered by `unitSeq → drawingNumber` so the UI can merge them into a single unit-based tree. **Standard parts now include `fixtureSeq`, `unitSeq`, `partSeq`** (same fields as manufactured parts) allowing the UI to group/order standard and manufactured parts under the same unit node without separate sections. Standard parts also include `qty`, `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. Search filters are applied as case-insensitive "contains" matches. `null` if fixture not found. |
+| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). **Persistence:** both lists are backed by the unified table **`fixture_bom`** (`part_type` = `manufactured` \| `standard`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. If any search arguments are provided, filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part itemCode/name/make. `null` if fixture not found. |
 | `getDesignUploadUrl` | `fixtureId: String!`, `filename: String!` | `DesignUploadUrlType` | Get a presigned S3 upload URL for a BOM file (`.xlsx` or `.zip`). Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the file bytes to `uploadUrl` before calling `parseBomFile`. |
-| `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level.** Parse a previously uploaded BOM file (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `summary`. **BOM column layout (new):** B=Sr.No.(ignored), C=DRAWING NO., D=DESCRIPTION, E=QUANTITY, F=RH-LH TYPE. Header row is auto-detected by finding "DRAWING NO." in col C. **Classification rules:** `SRBOP` prefix → standard part (`item_code = drawing_no`); `S`+project+5 chars → unit-section header (silently skipped); `S`+project+7 chars → manufactured part; anything else → wrong entry. **Standard part fields:** `drawingNo`, `itemCode`, `description`, `qty`, `lhRh`, `fixtureSeq`, `unitSeq` (inherited from last unit-section header), `productFound` (bool — whether item_code exists in products master), `productId`, `isWrongEntry`, `wrongEntryReason`. **Product not found → `isWrongEntry=true`; row is excluded from submission.** `similarProducts` is removed. **Manufactured part fields:** `drawingNo`, `description`, `qty`, `lhRh`, `fixtureSeq`, `unitSeq`, `partSeq`, `parsedDrawingNo`, `hasDrawing`, `isDuplicateInProject`, `duplicateFixtures`, `isWrongEntry`, `wrongEntryReason`. **Wrong entry fields:** `rowNum`, `rawValue`, `reason`. |
+| `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level.** Parse a previously uploaded BOM ZIP (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `summary`. **New ZIP layout:** BOM.xlsx contains only standard parts (SRBOP rows) grouped under unit-section headers. Manufactured parts are extracted from PDF drawing files inside unit directories (e.g. `BOM/S2504900103/S250490010301.pdf`). Drawing number comes from the PDF filename; description and quantity are parsed from the PDF title block via pdfplumber (best-effort). Each manufactured part includes `source` field: `"pdf"` when from drawing PDF, `"excel"` when from BOM.xlsx (backward compat). `has_drawing` is `true` for PDF-sourced parts. `summary` includes `duplicateDrawingCount`. |
 | `getDrawingViewUrl` | `partId: String!` | `DrawingViewUrlType` | Get a presigned GET URL to view/download a manufactured part's drawing file. Returns `viewUrl`, `partId`, `drawingNo`. Raises error if part has no drawing. |
 | `getProjectBomUploadUrl` | `projectId: String!`, `filename: String!` | `ProjectBomUploadUrlType` | **Project-level.** Get a presigned S3 upload URL for a BOM file scoped to a project (no fixture needed). Returns `uploadUrl`, `s3Key`, `projectId`. PUT the file bytes to `uploadUrl`, then call `parseProjectBomFile`. |
-| `parseProjectBomFile` | `projectId: String!`, `s3Key: String!` | `BomParseResultType` | **Project-level.** Same column layout and classification rules as `parseBomFile`. Fixture/unit context is derived from unit-section headers in the BOM rows themselves (no separate fixture-number cell). Each manufactured part includes `fixtureSeq`, `unitSeq`, `partSeq`, `parsedDrawingNo`, `hasDrawing`, `fixtureExists`, `existingFixtureId`, `existingFixtureNumber`, `isDuplicateInProject`, `duplicateFixtures`. Each standard part includes `fixtureSeq`, `unitSeq` (inherited from last unit-section header above the SRBOP row), `productFound`, `productId`, `isWrongEntry`, `wrongEntryReason`. Summary includes `bomFixtureSeq`, `totalManufactured`, `totalStandard`, `wrongEntryCount`, `fixtureMismatchCount`. No DB writes. |
+| `parseProjectBomFile` | `projectId: String!`, `s3Key: String!` | `BomParseResultType` | **Project-level (preferred).** Parse BOM ZIP — manufactured parts are extracted from PDF drawings inside unit directories; standard parts from BOM.xlsx (SRBOP rows under unit headers). Fixture sequences are derived from drawing numbers. Each manufactured part includes `fixtureSeq`, `fixtureExists`, `existingFixtureId`, `existingFixtureNumber`, `isDuplicateInProject`, `duplicateFixtures`, `source` (`"pdf"` or `"excel"`). Each standard part includes `fixtureSeq` (from Excel unit header). Summary includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`, `newFixtureSeqs`, `existingFixtureSeqs`. No DB writes. |
 | `getManufacturedPoUploadUrl` | `fixtureId: String!`, `filename: String!` | `ManufacturedPoUploadUrlType` | Phase 4. Get a presigned S3 upload URL for a **user-edited manufactured PO Excel**. Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the edited Excel bytes to `uploadUrl`, then call `importManufacturedPoExcel(fixtureId, s3Key)`. |
 
 **Email store (module: core; requires auth).**
@@ -611,8 +613,8 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `createProduct` | `input: ProductInput!` (name, categoryId, **itemCode**, description, make, **puUnitId**, **stkUnitId**, **procMtd**, **locationInStore**, quantity, isActive) | `ProductType` | Create product. **itemCode** replaces legacy part number; purchase/stock UOM are **puUnitId** and **stkUnitId** (both optional). |
 | `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id (same fields as create). |
 | `deleteProduct` | `id: String!` | `Boolean!` | Delete product by id. |
-| `createPurchaseOrder` | `input: PurchaseOrderInput!` (title, `poType`=StandardPart|ManufacturedPart, details, vendorId, supplierId, attachments, poSendDate, poStatus, isActive) | `PurchaseOrderType` | Create purchase order header. `poNumber` is auto-generated by backend in format `POYYMMDDNN` (2-digit daily sequence). |
-| `updatePurchaseOrder` | `id: String!`, `input: PurchaseOrderUpdateInput!` | `PurchaseOrderType` | Partial update purchase order by id (only provided fields are updated). Supports `attachmentsToAdd` / `attachmentsToRemove` to modify the stored attachments list (in addition to the legacy `attachments` replace field). |
+| `createPurchaseOrder` | `input: PurchaseOrderInput!` (title, `poType`=StandardPart|ManufacturedPart|Miscellaneous, projectId, details, vendorId, supplierId, attachments, poSendDate, poStatus, isActive, `lineItems`, `lineItemIds`) | `PurchaseOrderType` | Create purchase order header. `poNumber` is auto-generated by backend in format `POYYMMDDNN`. Can accept `lineItemIds` or complex `lineItems` (`fixtureBomId`, `description`, `expenseCategoryId`, `miscellaneousLineItemCost`). |
+| `updatePurchaseOrder` | `id: String!`, `input: PurchaseOrderUpdateInput!` | `PurchaseOrderType` | Partial update purchase order by id (only provided fields are updated). Supports `attachmentsToAdd` / `attachmentsToRemove` to modify the stored attachments list. Can also update `projectId`, and replace `lineItems` or `lineItemIds`. |
 | `deletePurchaseOrder` | `id: String!` | `Boolean!` | Delete purchase order by id. |
 
 **Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
@@ -627,14 +629,14 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `createFixture` | `input: CreateFixtureInput!` (projectId, description, status) | `FixtureType` | Create a fixture under a project. `fixtureNumber` and `fixtureSeq` are auto-generated from `project.projectNumber`. Requires `project.projectNumber` to be set. |
 | `updateFixture` | `id: String!`, `input: UpdateFixtureInput!` (description, status, isActive) | `FixtureType` | Update fixture description, status, or active flag. |
 | `deleteFixture` | `id: String!` | `Boolean!` | Hard delete a fixture and all its BOM parts. |
-| `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?) | `FixtureType` | **Fixture-level.** Commit a parsed BOM file to a specific fixture. Atomically replaces all BOM rows. Uploads drawing files from ZIP. **Standard part resolution (no auto-create):** (1) if `productMatchResolutions` has a UUID for the part's `item_code`, link to that product; (2) otherwise look up `products` by `item_code`; (3) if still not found, **the standard part row is skipped entirely** (not inserted). Only parts whose SRBOP `item_code` exists in the products master are committed. |
-| `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM to the project. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed for the same project) are skipped. Same no-auto-create resolution as `submitBomUpload`: lookup by `item_code` → if not found, row is skipped. Standard parts carry `fixture_seq`/`unit_seq` inherited from their enclosing unit-section header, so each part is routed to the correct fixture. Returns the list of affected fixtures. |
+| `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?, quantityCorrections?) | `FixtureType` | **Fixture-level.** Commit a parsed BOM ZIP to a specific fixture. Atomically replaces all BOM rows. Manufactured parts come from PDF drawings in unit directories; standard parts from BOM.xlsx. Uploads drawing files from ZIP to S3. Standard part resolution: (1) `productMatchResolutions` UUID, (2) lookup by `item_code`, (3) skip if not found. `quantityCorrections`: list of `{drawingNo, qty}` — overrides the parsed quantity for specific manufactured parts before persisting. |
+| `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?, quantityCorrections?) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM ZIP to the project. Manufactured parts from PDF drawings, standard parts from BOM.xlsx. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed) are skipped. Same standard part resolution and `quantityCorrections` as `submitBomUpload`. Returns the list of affected fixtures. |
 | `sendManufacturedToVendor` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `EmailType` | Phase 3. Create an Email record + attachments snapshot (Excel + copied drawings) for selected manufactured parts, and sets `vendorId` on those parts. |
 | `exportManufacturedPoExcel` | `fixtureId: String!`, `partIds: [String!]!` | `PoExcelExportType` | Phase 4. Export an **editable PO Excel template** from **`fixture_bom` row ids** (`partIds` = primary keys). Each id must belong to the fixture and have `part_type = manufactured`. Returns `s3Key` + `downloadUrl`. |
 | `importManufacturedPoExcel` | `fixtureId: String!`, `s3Key: String!` | `ImportManufacturedPoResultType` | Phase 4. Import the edited PO Excel and update fields (pending-only). Rejects if any affected part has `status != pending`. Only overwrites non-empty cells. |
 | `createManufacturedPo` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `PurchaseOrderType` | Phase 4. Create a **`purchase_orders`** row (`poType = ManufacturedPart`) with generated PO Excel in `attachments`, from **`fixture_bom` row ids** (`partIds`; each `part_type = manufactured`). Sets `vendorId` on rows and `status = inprogress` (pending-only). |
 | `updateManufacturedStatusBulk` | `fixtureId: String!`, `partIds: [String!]!`, `status: String!` | `Int!` | Phase 5. Bulk status update for manufactured parts in a **single fixture**. Allowed transitions only: `inprogress -> quality_checked`, `quality_checked -> received`. Returns number of updated parts. |
-| `updateManufacturedReceivedQty` | `partId: String!`, `receivedQty: Float` | `BomManufacturedPartType` | Phase 5. Update the `qty` field of a manufactured part to the received count. Allowed only when current status is `quality_checked` or `received`. Returns the updated part (field `qty` reflects the new value). |
+| `updateManufacturedReceivedQty` | `partId: String!`, `receivedLhQty: Float`, `receivedRhQty: Float` | `BomManufacturedPartType` | Phase 5. Update received LH/RH quantities. Allowed only when current status is `quality_checked` or `received`. Returns the updated part. |
 | `updateStandardPartPurchaseUnitPrice` | `standardPartId: String!`, `purchaseUnitPrice: Float` | `FixtureProductType` | Phase 6. Inline edit: update `purchaseUnitPrice` for a **standard** row in unified table **`fixture_bom`** (`part_type = standard`). |
 | `exportStandardPoExcel` | `fixtureId: String!`, `partIds: [String!]!` | `PoExcelExportType` | Phase 6. Export Standard Parts PO Excel from **`fixture_bom` row ids** (`partIds` = primary keys; each row must have `part_type = standard`). Excel includes: itemCode, description, make, unit, expectedQty, currentStock, purchaseQty (calculated), purchaseUnitPrice, supplierName. |
 | `createStandardPo` | `fixtureId: String!`, `partIds: [String!]!`, `supplierId: String!` | `PurchaseOrderType` | Phase 6. Create a **`purchase_orders`** row (`poType = StandardPart`) with generated PO Excel in `attachments`, from **`fixture_bom` row ids** (`partIds`; each `part_type = standard`), and set `supplierId` on those rows. |
@@ -908,23 +910,19 @@ query BomView(
   ) {
     fixture { id fixtureNumber status bomUploadedAt }
     manufacturedParts {
-      id fixtureId drawingNo description qty lhRh status
-      vendorId vendorName unitPrice
-      fixtureSeq unitSeq partSeq drawingFileS3Key productId
+      id fixtureId srNo drawingNo description qtyLh qtyRh status
+      vendorId vendorName receivedLhQty receivedRhQty
+      fixtureSeq unitSeq partSeq drawingFileS3Key
     }
     standardParts {
-      id fixtureId productId unitId supplierId supplierName
-      itemCode      # Product.itemCode (SRBOP code)
+      id fixtureId productId srNo unitId supplierId supplierName
+      itemCode      # Product.itemCode
       productName productMake
       uom           # Product master UOM code (stk unit, else pu unit)
       qty           # expected quantity from BOM line item
-      lhRh          # LH / RH / BOTH from BOM
       currentStock  # Product.quantity from product master
       purchaseQty   # max(0, qty - currentStock) — how many to procure
       purchaseUnitPrice
-      # Unit hierarchy — same fields as manufacturedParts, use these to
-      # merge both lists into a single unit-tree on the UI side
-      fixtureSeq unitSeq partSeq
     }
   }
 }
@@ -962,13 +960,13 @@ query {
       fixtureSeq unitSeq partSeq parsedDrawingNo hasDrawing
       isDuplicateInProject
       duplicateFixtures { id fixtureNumber }
+      source  # "pdf" (from drawing PDF) or "excel" (from BOM.xlsx)
     }
     standardParts {
-      drawingNo itemCode description qty lhRh
-      fixtureSeq unitSeq           # both inherited from enclosing unit-section header
-      productFound                  # true = item_code exists in products master
-      productId                     # set when productFound=true
-      isWrongEntry wrongEntryReason # true when productFound=false
+      drawingNo itemCode description qty lhRh uom
+      productFound productId
+      isWrongEntry wrongEntryReason
+      fixtureSeq unitSeq
     }
     wrongEntries { rowNum rawValue reason }
     summary { totalManufactured totalStandard wrongEntryCount }
@@ -992,12 +990,13 @@ query GetProjectBomUploadUrl($projectId: String!, $filename: String!) {
 }
 # Variables: { "projectId": "PROJECT_UUID", "filename": "BOM.zip" }
 
-# 27. Project-level parse BOM (standard parts grouped by fixture via unit-section context)
+# 27. Project-level parse BOM (manufactured from PDFs, standard from Excel)
 query ParseProjectBomFile($projectId: String!, $s3Key: String!) {
   parseProjectBomFile(projectId: $projectId, s3Key: $s3Key) {
     summary {
       totalManufactured totalStandard wrongEntryCount
       bomFixtureSeq fixtureMismatchCount
+      duplicateDrawingCount newFixtureSeqs existingFixtureSeqs
     }
     manufacturedParts {
       drawingNo description qty lhRh
@@ -1005,15 +1004,15 @@ query ParseProjectBomFile($projectId: String!, $s3Key: String!) {
       fixtureSeq unitSeq partSeq parsedDrawingNo hasDrawing
       isDuplicateInProject duplicateFixtures { id fixtureNumber }
       fixtureExists existingFixtureId existingFixtureNumber
+      source  # "pdf" or "excel"
     }
     standardParts {
-      drawingNo itemCode description qty lhRh
-      fixtureSeq unitSeq           # both inherited from enclosing unit-section header
-      productFound                  # true = item_code exists in products master
-      productId                     # set when productFound=true
-      isWrongEntry wrongEntryReason # true when productFound=false
+      drawingNo itemCode description qty lhRh uom
+      productFound productId
+      isWrongEntry wrongEntryReason
+      fixtureSeq unitSeq
     }
-    wrongEntries { rowNum rawValue reason }
+    wrongEntries { rowNum srNo rawValue reason }
   }
 }
 # Variables: { "projectId": "PROJECT_UUID", "s3Key": "bom-uploads/projects/..." }
@@ -1294,17 +1293,12 @@ mutation {
 # 23. Submit BOM upload (after parseBomFile preview)
 # Step 1: getDesignUploadUrl → get uploadUrl + s3Key
 # Step 2: PUT file bytes to uploadUrl
-# Step 3: parseBomFile → review, optionally resolve wrong entries
-# Step 4: submitBomUpload
+# Step 3: parseBomFile → review manufactured parts (from PDFs) and standard parts (from Excel)
+#         User can correct quantities for manufactured parts where PDF extraction was unreliable
+# Step 4: submitBomUpload with optional resolutions and quantity corrections
 #
-# Standard part resolution (no auto-create):
-#   - If item_code (SRBOP code) exists in product master → link to it and insert row
-#   - Otherwise → row is SKIPPED entirely (not inserted)
-#   Preview (parseBomFile) shows isWrongEntry=true for missing products so
-#   the user can add missing products to the master before submitting.
-#
-# productMatchResolutions is OPTIONAL. Provide it only to force-link a specific
-# part to a specific existing product (overrides the item_code lookup).
+# Standard part resolution: (1) productMatchResolutions UUID, (2) lookup by item_code, (3) skip if not found
+# quantityCorrections: override parsed qty for specific manufactured parts (identified by drawingNo)
 mutation {
   submitBomUpload(input: {
     fixtureId: "FIXTURE_UUID"
@@ -1318,12 +1312,16 @@ mutation {
       }
     ]
     # productMatchResolutions is optional — omit for full auto-resolve
-    # Provide only to force-link a part to an existing product
     productMatchResolutions: [
       {
         itemCode: "MGPM63-25Z"
         productId: "EXISTING_PRODUCT_UUID"
       }
+    ]
+    # quantityCorrections is optional — only needed for rows where PDF qty was wrong or 0
+    quantityCorrections: [
+      { drawingNo: "S250490010402", qty: 2 }
+      { drawingNo: "S250490010702", qty: 1 }
     ]
   }) {
     id fixtureNumber status s3BomKey bomFilename bomUploadedAt
@@ -1333,9 +1331,10 @@ mutation {
 # 24. Project-level BOM submit (preferred for UI "Upload BOM" on a project row)
 # Step 1: getProjectBomUploadUrl → get uploadUrl + s3Key (project-scoped, no fixture needed)
 # Step 2: PUT file bytes to uploadUrl
-# Step 3: parseProjectBomFile → review (fixture IDs derived from drawing numbers, duplicates flagged)
+# Step 3: parseProjectBomFile → review (manufactured from PDFs, standard from Excel,
+#         fixture IDs derived from drawing numbers, duplicates flagged)
+#         User corrects quantities for manufactured parts where PDF extraction was unreliable
 # Step 4: submitProjectBomUpload → auto-creates missing fixtures, skips duplicate drawings
-#         Standard parts are auto-resolved (same logic as submitBomUpload above)
 mutation SubmitProjectBomUpload($input: ProjectBomSubmitInput!) {
   submitProjectBomUpload(input: $input) {
     id fixtureNumber fixtureSeq status s3BomKey bomFilename bomUploadedAt
@@ -1349,8 +1348,11 @@ mutation SubmitProjectBomUpload($input: ProjectBomSubmitInput!) {
 #     "filename": "BOM.zip",
 #     "wrongEntryResolutions": [
 #       { "originalDrawingNo": "20x46 LG", "action": "skip" }
+#     ],
+#     "quantityCorrections": [
+#       { "drawingNo": "S250490010402", "qty": 2 },
+#       { "drawingNo": "S250490010702", "qty": 1 }
 #     ]
-#     // productMatchResolutions omitted → all standard parts auto-resolved
 #   }
 # }
 ```
@@ -3451,7 +3453,7 @@ Then update your Authorization header.
 
 **Project Management & Design/BOM (require module `project_management` enabled):** `projects`, `project`, `projectAssignments`, `projectAssignmentBoard`, `fixtures`, `fixture`, `bomView`, `getDesignUploadUrl`, `parseBomFile`, `getDrawingViewUrl`, `getProjectBomUploadUrl`, `parseProjectBomFile`, `getManufacturedPoUploadUrl`.
 
-**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`, `purchaseOrders`, `purchaseOrder`.
+**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`, `purchaseOrders`, `purchaseOrder`, `exportPurchaseOrderLineItemsCsv`, `getPurchaseOrderAttachmentUploadUrl`.
 
 ✅ **Mutations (single source of truth: this document)**
 
@@ -3487,9 +3489,34 @@ Then update your Authorization header.
 ### Overview
 
 Every `CREATE`, `UPDATE`, `DELETE`, `LOGIN`, `EXPORT`, and `UPLOAD` action is recorded in the `audit_logs` table. The system is:
+- **Automatic** — any model inheriting `AuditMixin` is automatically audit-logged on INSERT, UPDATE, and DELETE via a SQLAlchemy `before_flush` event listener. No manual `log_audit()` calls needed in service code.
 - **Append-only** — entries are never soft-deleted or modified.
 - **Atomic** — the log entry is written in the same DB transaction as the data change, so there is no data-without-audit state.
 - **Field-level** — the `changes` JSONB column stores `{field: [old_value, new_value]}` pairs, allowing fine-grained search.
+- **Context-enriched** — every entry automatically captures `ip_address`, `request_id`, `user_agent`, and `source` from the request-scoped `AuditContext` (set once per request in the GraphQL context getter).
+
+### How automatic auditing works
+
+1. **`install_audit_listener()`** in `app/infrastructure/database.py` registers a `before_flush` event on all SQLAlchemy sessions.
+2. On every flush, the listener inspects `session.new` (INSERTs), `session.dirty` (UPDATEs), and `session.deleted` (hard DELETEs).
+3. For each object whose model has `AuditMixin` (detected via `is_deleted` attribute), it auto-generates an `AuditLog` entry with field-level diffs.
+4. Soft-deletes are detected by checking if `is_deleted` changed from `False` to `True` in a dirty object.
+5. `AuditMixin` bookkeeping fields (`created_at`, `modified_at`, `id`, etc.) are excluded from diffs.
+
+### Model opt-out controls
+
+| Attribute | Effect |
+|-----------|--------|
+| `__audit_exclude__ = True` | Entire model is skipped by the auto-listener (e.g. `RefreshToken`, `EntityPermission`, `FieldPermission`) |
+| `__audit_exclude_fields__ = {"hashed_password"}` | Specific fields are excluded from change diffs (e.g. `User.hashed_password`) |
+
+### Manual `log_audit()` (non-ORM events)
+
+For actions that don't map to a single model flush, `log_audit()` is still called manually:
+- `ACTION_LOGIN` — in `auth_service.login()`
+- `ACTION_UPLOAD` — in `design_bom_service.submit_bom_upload()` / `submit_project_bom_upload()`
+- `ACTION_EXPORT` — in `design_bom_service.create_manufactured_po_mail()` / `create_standard_po_mail()`
+- `ACTION_PERMISSION_CHANGE` — in `role_service.upsert_role_with_permissions()`
 
 ### Database model
 
@@ -3502,12 +3529,23 @@ audit_logs
   action       VARCHAR(20)   NOT NULL  indexed  (CREATE|UPDATE|DELETE|LOGIN|EXPORT|UPLOAD|CONFIG|PERMISSION_CHANGE)
   entity_name  VARCHAR(100)  NOT NULL  indexed  (e.g. "customer", "purchase_order", "fixture")
   entity_id    VARCHAR(36)   nullable  indexed
-  entity_label VARCHAR(255)  nullable
-  changes      JSONB         nullable  (GIN index for field-level search)
+  entity_label VARCHAR(255)  nullable           (auto-resolved from name/code/title/etc.)
+  changes      JSONB         nullable
+  request_id   VARCHAR(36)   nullable  indexed  (correlates entries from one API request)
   ip_address   VARCHAR(45)   nullable
+  user_agent   VARCHAR(512)  nullable
+  source       VARCHAR(50)   nullable           ("graphql", "rest", "system", etc.)
+
+  Composite indexes:
+    ix_audit_logs_entity_lookup   (entity_name, entity_id)
+    ix_audit_logs_entity_timeline (entity_name, timestamp)
+    ix_audit_logs_user_timeline   (user_id, timestamp)
 ```
 
-Alembic migration: **041** (`alembic/versions/20240101_000041_add_audit_logs.py`)
+Alembic migrations:
+- **041** (`alembic/versions/20240101_000041_add_audit_logs.py`) — initial table
+- **002** (`alembic/versions/20260401_000002_add_deleted_by_and_request_id.py`) — `deleted_by` on AuditMixin, `request_id` on audit_logs
+- **003** (`alembic/versions/20260401_000003_add_audit_context_columns_and_indexes.py`) — `user_agent`, `source`, composite indexes
 
 ### What is logged
 
@@ -3540,6 +3578,8 @@ query GetAuditLogs(
   $action: String
   $entityName: String
   $entityId: String
+  $requestId: String       # correlate all entries from a single API request
+  $source: String          # filter by origin: "graphql", "rest", "system", etc.
   $fieldName: String
   $oldValueContains: String
   $newValueContains: String
@@ -3554,6 +3594,8 @@ query GetAuditLogs(
     action: $action
     entityName: $entityName
     entityId: $entityId
+    requestId: $requestId
+    source: $source
     fieldName: $fieldName
     oldValueContains: $oldValueContains
     newValueContains: $newValueContains
@@ -3575,7 +3617,10 @@ query GetAuditLogs(
       entityName
       entityId
       entityLabel
+      requestId
       ipAddress
+      userAgent
+      source
       changes {
         field
         oldValue
@@ -3591,7 +3636,7 @@ query GetAuditLogs(
 | Type              | Fields                                                                                             |
 |-------------------|----------------------------------------------------------------------------------------------------|
 | `AuditLogListType` | `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`                        |
-| `AuditLogType`    | `id`, `timestamp`, `userId`, `userName`, `action`, `entityName`, `entityId`, `entityLabel`, `ipAddress`, `changes` |
+| `AuditLogType`    | `id`, `timestamp`, `userId`, `userName`, `action`, `entityName`, `entityId`, `entityLabel`, `requestId`, `ipAddress`, `userAgent`, `source`, `changes` |
 | `AuditChangeType` | `field`, `oldValue`, `newValue`                                                                    |
 
 **Filter parameters:**
@@ -3605,6 +3650,8 @@ query GetAuditLogs(
 | `action`           | String | Exact action (CREATE, UPDATE, DELETE, LOGIN, EXPORT, UPLOAD, ...)      |
 | `entityName`       | String | Exact entity name (e.g. "customer", "fixture")                         |
 | `entityId`         | String | Exact entity primary key                                               |
+| `requestId`        | String | Exact request correlation ID (groups all entries from one API call)     |
+| `source`           | String | Exact source filter (e.g. "graphql", "rest", "system")                 |
 | `fieldName`        | String | Checks if `changes` JSONB contains this key (e.g. "name")             |
 | `oldValueContains` | String | Case-insensitive substring match within old values in the changes JSON |
 | `newValueContains` | String | Case-insensitive substring match within new values in the changes JSON |
@@ -3631,6 +3678,16 @@ auditLogs(action: "LOGIN", fromDate: "2026-03-28") { ... }
 **Find what was changed to "ACME Corp":**
 ```graphql
 auditLogs(newValueContains: "ACME Corp") { ... }
+```
+
+**Correlate all changes from a single API request:**
+```graphql
+auditLogs(requestId: "550e8400-e29b-41d4-a716-446655440000") { ... }
+```
+
+**Filter by source (e.g. only GraphQL mutations):**
+```graphql
+auditLogs(source: "graphql", action: "CREATE", fromDate: "2026-04-01") { ... }
 ```
 
 ### UI integration notes
@@ -3707,3 +3764,59 @@ Default when no `FieldPermission` rows are configured for an entity: **all field
 The UI receives a fully-filtered list and renders it as-is — no client-side permission checks are needed.
 
 `total`, `totalPages`, `hasMore`, `firstPage`, `lastPage` are all calculated **after** permission filtering, so pagination is always accurate and consistent with what the user can actually see.
+
+### Example: Get Purchase Order with Line Items
+```graphql
+query GetPurchaseOrderWithLineItems($id: String!) {
+  purchaseOrder(id: $id) {
+    id
+    poNumber
+    title
+    poType
+    projectId
+    details
+    vendorId
+    vendorName
+    supplierId
+    supplierName
+    attachments
+    poSendDate
+    poStatus
+    isActive
+    lineItems {
+      id
+      purchaseOrderId
+      fixtureBomId
+      description
+      expenseCategoryId
+      miscellaneousLineItemCost
+      createdAt
+      drawingNumber
+      bomDescription
+      quantity
+      purchaseUnitPrice
+      status
+      lhRh
+      receivedQuantity
+    }
+  }
+}
+```
+
+### Example: Export Purchase Order Line Items to CSV
+```graphql
+query ExportPOLineItems($id: String!) {
+  exportPurchaseOrderLineItemsCsv(id: $id)
+}
+```
+
+### Example: Get Purchase Order Attachment Upload URL
+```graphql
+query GetPOAttachmentUploadUrl($poId: String!, $filename: String!) {
+  getPurchaseOrderAttachmentUploadUrl(poId: $poId, filename: $filename) {
+    uploadUrl
+    s3Key
+    poId
+  }
+}
+```

@@ -46,6 +46,10 @@ export const UI_PERMISSIONS = {
   MANAGE_ROLE_PERMS:   { entity: 'role', action: 'update' },
   DELETE_ROLE:         { entity: 'role', action: 'delete' },
 
+  // ── Dynamic Custom Checks ───────────────────────────────────────────────────
+  // These are special cases where we want to dynamically check a string rather than a hardcoded enum.
+  // They should be resolved using `useCanAccess` instead of `useUIPermission`.
+  
   // ── Master Data (generic — entity-level create/update/delete) ─────────────
   CREATE_CUSTOMER:     { entity: 'customer',         action: 'create' },
   EDIT_CUSTOMER:       { entity: 'customer',         action: 'update' },

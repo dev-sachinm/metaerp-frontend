@@ -15,6 +15,7 @@ export const UPDATE_MANUFACTURED_RECEIVED_QTY = `
     updateManufacturedReceivedQty(partId: $partId, receivedQty: $receivedQty) {
       id
       qty
+      receivedQuantity
       lhRh
       status
     }

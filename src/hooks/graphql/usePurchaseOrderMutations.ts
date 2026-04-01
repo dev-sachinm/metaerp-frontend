@@ -1,7 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { executeGraphQL } from '@/graphql/client'
-import { CREATE_MANUFACTURED_PO, CREATE_STANDARD_PO } from '@/graphql/mutations/purchaseOrder.mutations'
+import {
+  CREATE_MANUFACTURED_PO,
+  CREATE_STANDARD_PO,
+  CREATE_PURCHASE_ORDER,
+  UPDATE_PURCHASE_ORDER,
+  DELETE_PURCHASE_ORDER,
+} from '@/graphql/mutations/purchaseOrder.mutations'
 import { designKeys } from '@/hooks/graphql/useDesign'
+import { poKeys } from '@/hooks/graphql/usePurchaseOrderQueries'
 import { getErrorMessage, isPermissionError } from '@/lib/graphqlErrors'
 import type { PurchaseOrderCreateResult } from '@/types/purchaseOrder'
 import { toast } from 'sonner'
@@ -42,6 +49,51 @@ export function useCreateStandardPo(fixtureId: string) {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create standard PO'))
+    },
+  })
+}
+
+export function useCreatePurchaseOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: any) =>
+      executeGraphQL<{ createPurchaseOrder: PurchaseOrderCreateResult }>(CREATE_PURCHASE_ORDER, { input }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: poKeys.lists() })
+      toast.success(`Purchase Order created: ${data.createPurchaseOrder.poNumber}`)
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to create purchase order'))
+    },
+  })
+}
+
+export function useUpdatePurchaseOrder(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: any) =>
+      executeGraphQL<{ updatePurchaseOrder: PurchaseOrderCreateResult }>(UPDATE_PURCHASE_ORDER, { id, input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: poKeys.detail(id) })
+      queryClient.invalidateQueries({ queryKey: poKeys.lists() })
+      toast.success('Purchase order updated')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update purchase order'))
+    },
+  })
+}
+
+export function useDeletePurchaseOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => executeGraphQL<{ deletePurchaseOrder: boolean }>(DELETE_PURCHASE_ORDER, { id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: poKeys.lists() })
+      toast.success('Purchase order deleted')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to delete purchase order'))
     },
   })
 }

@@ -13,7 +13,7 @@ const AUDIT_WIDGET_QUERY = `
   query AuditWidget($page: Int, $pageSize: Int) {
     auditLogs(page: $page, pageSize: $pageSize) {
       items {
-        id timestamp userName action entityName entityLabel
+        id timestamp userName action entityName entityLabel source
       }
       hasMore
       lastPage
@@ -28,6 +28,7 @@ interface AuditWidgetLog {
   action: string
   entityName: string
   entityLabel?: string | null
+  source?: string | null
 }
 
 // ── Action badge colours ──────────────────────────────────────────────────────
@@ -157,10 +158,17 @@ export function AuditLogWidget() {
                   <p className="text-[10px] text-slate-400 mt-0.5 capitalize">{log.entityName}</p>
                 </div>
 
-                {/* Time */}
-                <span className="text-[10px] text-slate-400 shrink-0 mt-0.5">
-                  {relativeTime(log.timestamp)}
-                </span>
+                {/* Time & Source */}
+                <div className="flex flex-col items-end shrink-0 mt-0.5">
+                  <span className="text-[10px] text-slate-400">
+                    {relativeTime(log.timestamp)}
+                  </span>
+                  {log.source && (
+                    <span className="text-[9px] text-slate-300 mt-0.5 uppercase tracking-wider">
+                      {log.source}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
 

@@ -91,6 +91,11 @@ const NAV_ICONS: Record<NonNullable<NavItemConfig['icon']>, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2zm2 8h8m-8 4h5" />
     </svg>
   ),
+  purchase_order: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
   email: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
@@ -324,7 +329,8 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
         </button>
       </div>
 
-      {/* DEV-ONLY: Permission debug panel — remove before production */}
+      {/* DEV-ONLY: Permission debug panel — removed from UI */}
+      {/* 
       {isDev && !isCollapsed && (
         <div className="mx-2 mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] leading-4 text-amber-900 overflow-auto max-h-56">
           <p className="font-bold mb-1">🔍 Debug (dev only)</p>
@@ -357,6 +363,7 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           <p className="break-all">{visibleNavItems.map(i => i.label).join(', ') || '(none)'}</p>
         </div>
       )}
+      */}
 
       {/* Animated gradient accent */}
       <div className="absolute top-0 right-0 w-0.5 h-full bg-gradient-to-b from-indigo-600 via-blue-600 to-indigo-600 opacity-50" />

@@ -4,9 +4,8 @@
  */
 export const MANUFACTURED_PART_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'pending', label: 'Pending' },
-  { value: 'sent_to_vendor', label: 'Sent to vendor' },
-  { value: 'in_production', label: 'In production' },
-  { value: 'quality_checked', label: 'Quality checked' },
+  { value: 'inprogress', label: 'Inprogress' },
+  { value: 'quality_checked', label: 'Quality Checked' },
   { value: 'received', label: 'Received' },
 ]
 

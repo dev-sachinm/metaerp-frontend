@@ -118,11 +118,13 @@ function toBackendProductInput(input: ProductInput) {
   return {
     name: input.name,
     categoryId: input.categoryId ?? null,
-    itemCode: input.partNo ?? null,
+    itemCode: input.itemCode ?? null,
     description: input.description ?? null,
     make: input.make ?? null,
-    puUnitId: input.unitId ?? null,
-    stkUnitId: input.unitId ?? null,
+    puUnitId: input.puUnitId ?? null,
+    stkUnitId: input.stkUnitId ?? null,
+    procMtd: input.procMtd ?? null,
+    locationInStore: input.locationInStore ?? null,
     quantity: input.quantity ?? null,
     isActive: input.isActive ?? true,
   }

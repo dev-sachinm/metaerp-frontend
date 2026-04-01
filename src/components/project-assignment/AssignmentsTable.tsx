@@ -26,7 +26,11 @@ function labelForAssignment(
   if (row.principalType === 'user') {
     const u = users.find((x) => x.id === row.principalId)
     if (!u) return row.principalId
-    return u.email || u.username || [u.firstName, u.lastName].filter(Boolean).join(' ') || row.principalId
+    const name = [u.firstName, u.lastName].filter(Boolean).join(' ')
+    if (name && u.email) return `${name} (${u.email})`
+    if (name) return name
+    if (u.email) return u.email
+    return u.username || row.principalId
   }
 
   const r = roles.find((x) => x.id === row.principalId)
@@ -51,7 +55,6 @@ export function AssignmentsTable({
         <TableRow>
           <TableHead>Principal Type</TableHead>
           <TableHead>Principal</TableHead>
-          <TableHead>Access Level</TableHead>
           <TableHead>Assigned At</TableHead>
           <TableHead>Assigned By</TableHead>
           <TableHead className="w-[100px]">Action</TableHead>
@@ -62,7 +65,6 @@ export function AssignmentsTable({
           <TableRow key={`${a.projectId}-${a.principalType}-${a.principalId}`}>
             <TableCell className="capitalize">{a.principalType}</TableCell>
             <TableCell>{labelForAssignment(a, assignableUsers, assignableRoles)}</TableCell>
-            <TableCell className="capitalize">{a.accessLevel ?? 'viewer'}</TableCell>
             <TableCell>{a.assignedAt ? new Date(a.assignedAt).toLocaleString() : '—'}</TableCell>
             <TableCell>{a.assignedByUsername ?? a.assignedBy ?? '—'}</TableCell>
             <TableCell>

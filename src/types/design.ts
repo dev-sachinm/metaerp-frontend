@@ -53,6 +53,7 @@ export interface ManufacturedPart {
   drawingNo: string
   description: string
   qty?: number | null
+  receivedQuantity?: number | null
   lhRh?: string | null
   unitPrice?: number | null
   status?: string | null
@@ -82,6 +83,9 @@ export interface StandardPart {
   expectedQty?: number | null
   purchaseQty?: number | null
   purchaseUnitPrice?: number | null
+  fixtureSeq?: number | null
+  unitSeq?: number | null
+  partSeq?: number | null
 }
 
 export interface BomViewFixture {
@@ -170,6 +174,11 @@ export interface ProductMatchResolution {
   itemCode: string
   /** Empty string means no product matched — backend stores the part without a product link */
   productId: string
+}
+
+export interface QuantityCorrection {
+  drawingNo: string
+  qty: number
 }
 
 // ── Upload URL response ───────────────────────────────────────────────────────

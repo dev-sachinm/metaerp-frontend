@@ -27,6 +27,7 @@ import type {
   FixtureSummary,
   ParsedBom,
   ProductMatchResolution,
+  QuantityCorrection,
   SubmitBomResult,
   WrongEntryResolution,
 } from '@/types/design'
@@ -59,6 +60,7 @@ export interface BomSubmitInput {
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
   productMatchResolutions: ProductMatchResolution[]
+  quantityCorrections?: QuantityCorrection[]
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -202,6 +204,7 @@ export interface ProjectBomSubmitInput {
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
   productMatchResolutions?: ProductMatchResolution[]
+  quantityCorrections?: QuantityCorrection[]
 }
 
 export function useSubmitProjectBomUpload(projectId: string) {

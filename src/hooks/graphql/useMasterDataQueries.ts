@@ -241,7 +241,7 @@ export function useExpenseCategory(id: string | null) {
   })
 }
 
-export function useSuppliers(page = 1, pageSize = 20, filters: SupplierFilters = {}) {
+export function useSuppliers(page = 1, pageSize = 20, filters: SupplierFilters = {}, options?: { enabled?: boolean }) {
   const { isActive, nameContains, codeContains, contactPersonContains, emailContains } = filters
   return useQuery({
     queryKey: [...masterDataKeys.suppliers(page, pageSize, isActive), nameContains, codeContains, contactPersonContains, emailContains],
@@ -253,6 +253,7 @@ export function useSuppliers(page = 1, pageSize = 20, filters: SupplierFilters =
         contactPersonContains: contactPersonContains || undefined,
         emailContains: emailContains || undefined,
       }),
+    enabled: options?.enabled,
     staleTime: stale,
     gcTime: gc,
   })
@@ -268,7 +269,7 @@ export function useSupplier(id: string | null) {
   })
 }
 
-export function useVendors(page = 1, pageSize = 20, filters: VendorFilters = {}) {
+export function useVendors(page = 1, pageSize = 20, filters: VendorFilters = {}, options?: { enabled?: boolean }) {
   const { isActive, nameContains, codeContains, contactPersonContains, emailContains } = filters
   return useQuery({
     queryKey: [...masterDataKeys.vendors(page, pageSize, isActive), nameContains, codeContains, contactPersonContains, emailContains],
@@ -280,6 +281,7 @@ export function useVendors(page = 1, pageSize = 20, filters: VendorFilters = {})
         contactPersonContains: contactPersonContains || undefined,
         emailContains: emailContains || undefined,
       }),
+    enabled: options?.enabled,
     staleTime: stale,
     gcTime: gc,
   })

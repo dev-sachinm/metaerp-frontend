@@ -43,6 +43,9 @@ import { EditSupplier } from './pages/master/EditSupplier'
 import { VendorsList } from './pages/master/VendorsList'
 import { CreateVendor } from './pages/master/CreateVendor'
 import { EditVendor } from './pages/master/EditVendor'
+import { PurchaseOrdersList } from './pages/purchase-orders/PurchaseOrdersList'
+import { CreatePurchaseOrder } from './pages/purchase-orders/CreatePurchaseOrder'
+import { ViewPurchaseOrder } from './pages/purchase-orders/ViewPurchaseOrder'
 import { ProjectsList } from './pages/projects/ProjectsList'
 import { ProjectAssignmentPage } from './pages/projects/ProjectAssignmentPage'
 import { ViewProject } from './pages/projects/ViewProject'
@@ -506,6 +509,81 @@ function AppContent() {
         <Route path="vendors/create" element={<CreateVendor />} />
         <Route path="vendors/:id/edit" element={<EditVendor />} />
       </Route>
+
+      {/* Purchase Orders */}
+      <Route
+        path="/purchase-orders"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="list">
+                <PurchaseOrdersList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/purchase-orders/create"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="create">
+                <CreatePurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/purchase-orders/:id/view"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="read">
+                <ViewPurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      <Route
+        path="/purchase-orders/:id/edit"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="update">
+                <ViewPurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
 
       {/* Project Management (module project_management) */}
       <Route
