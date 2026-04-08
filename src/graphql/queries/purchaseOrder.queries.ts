@@ -7,10 +7,14 @@ export const GET_PURCHASE_ORDERS = `
         title
         poType
         projectId
+        projectName
+        fixtureId
         vendorName
         supplierName
         poSendDate
         poStatus
+        costingUpdatedDate
+        completedDate
         isActive
         createdAt
       }
@@ -24,9 +28,12 @@ export const GET_PURCHASE_ORDERS = `
   }
 `
 
-export const EXPORT_PO_LINE_ITEMS_CSV = `
+export const EXPORT_PO_LINE_ITEMS_XLSX = `
   query ExportPOLineItems($id: String!) {
-    exportPurchaseOrderLineItemsCsv(id: $id)
+    exportPurchaseOrderLineItemsXlsx(id: $id) {
+      s3Key
+      downloadUrl
+    }
   }
 `
 
@@ -39,6 +46,15 @@ export const GET_PO_ATTACHMENT_UPLOAD_URL = `
     }
   }
 `
+
+export const GET_PO_ATTACHMENT_DOWNLOAD_URL = `
+  query GetPOAttachmentDownloadUrl($s3Key: String!) {
+    getPurchaseOrderAttachmentDownloadUrl(s3Key: $s3Key) {
+      downloadUrl
+      filename
+    }
+  }
+`
 export const GET_PURCHASE_ORDER = `
   query GetPurchaseOrder($id: String!) {
     purchaseOrder(id: $id) {
@@ -47,6 +63,8 @@ export const GET_PURCHASE_ORDER = `
       title
       poType
       projectId
+      projectName
+      fixtureId
       details
       vendorId
       vendorName
@@ -54,10 +72,21 @@ export const GET_PURCHASE_ORDER = `
       supplierName
       poSendDate
       poStatus
+      costingUpdatedDate
+      completedDate
       isActive
       createdAt
+      modifiedAt
       createdByUsername
       attachments
+      parsedAttachments {
+        id
+        s3Key
+        filename
+        name
+        type
+        uploadedAt
+      }
       lineItems {
         id
         purchaseOrderId
@@ -73,6 +102,10 @@ export const GET_PURCHASE_ORDER = `
         status
         lhRh
         receivedQuantity
+      }
+      lineItemsSummary {
+        totalCost
+        itemCount
       }
     }
   }

@@ -41,6 +41,7 @@ export const GET_BOM_VIEW = `
         id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
         vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
+        pendingAt inprogressAt qualityCheckedAt receivedAt
       }
       standardParts {
         id fixtureId productId unitId supplierId supplierName

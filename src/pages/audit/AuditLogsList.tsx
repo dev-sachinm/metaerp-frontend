@@ -52,21 +52,20 @@ const AUDIT_LOGS_QUERY = `
       items {
         id timestamp userId userName action
         entityName entityId entityLabel ipAddress
-        requestId userAgent source
-        changes { field oldValue newValue }
+        requestId userAgent source changesJson
       }
     }
   }
 `
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface AuditChange { field: string; oldValue?: string | null; newValue?: string | null }
+type ChangeEntry = { oldValue: unknown; newValue: unknown }
 interface AuditLog {
   id: string; timestamp: string; userId: string; userName: string
   action: string; entityName: string; entityId: string
   entityLabel?: string | null; ipAddress?: string | null
   requestId?: string | null; userAgent?: string | null; source?: string | null
-  changes?: AuditChange[] | null
+  changesJson?: Record<string, ChangeEntry> | null
 }
 interface AuditLogList {
   items: AuditLog[]; total: number; page: number; totalPages: number
@@ -91,16 +90,23 @@ const ACTION_STYLE: Record<string, string> = {
   PERMISSION_CHANGE: 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtVal(v: unknown): string {
+  if (v === null || v === undefined) return '—'
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
 // ── Expanded row — shows metadata and changes table ───────────────────────────
 function ExpandedDetails({ log }: { log: AuditLog }) {
-  const changes = log.changes ?? []
+  const entries = Object.entries(log.changesJson ?? {})
   return (
     <div className="space-y-3 px-1">
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 bg-white p-2.5 rounded-md border border-slate-200 shadow-sm">
         <div><span className="font-semibold text-slate-500">Request ID:</span> <span className="font-mono ml-1">{log.requestId || '—'}</span></div>
         <div><span className="font-semibold text-slate-500">User Agent:</span> <span className="ml-1">{log.userAgent || '—'}</span></div>
       </div>
-      {changes.length > 0 ? (
+      {entries.length > 0 ? (
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-slate-50">
@@ -110,13 +116,13 @@ function ExpandedDetails({ log }: { log: AuditLog }) {
             </tr>
           </thead>
           <tbody>
-            {changes.map((c, i) => (
-              <tr key={i} className="border-t border-slate-100">
-                <td className="py-1.5 px-2 font-mono text-slate-600">{c.field}</td>
+            {entries.map(([field, { oldValue, newValue }]) => (
+              <tr key={field} className="border-t border-slate-100">
+                <td className="py-1.5 px-2 font-mono text-slate-600">{field}</td>
                 <td className="py-1.5 px-2 text-red-600 font-mono line-through opacity-70 max-w-[260px] truncate"
-                  title={c.oldValue ?? ''}>{c.oldValue ?? <span className="text-slate-300 no-underline">—</span>}</td>
-                <td className="py-1.5 px-2 text-green-700 font-mono max-w-[260px] truncate"
-                  title={c.newValue ?? ''}>{c.newValue ?? <span className="text-slate-300">—</span>}</td>
+                  title={fmtVal(oldValue)}>{fmtVal(oldValue)}</td>
+                <td className="py-1.5 px-2 text-green-700 font-mono font-medium max-w-[260px] truncate"
+                  title={fmtVal(newValue)}>{fmtVal(newValue)}</td>
               </tr>
             ))}
           </tbody>
@@ -157,7 +163,7 @@ function LogRow({ log }: { log: AuditLog }) {
         <TableCell className="text-xs text-slate-600 max-w-[200px] truncate" title={log.entityLabel ?? log.entityId}>
           {log.entityLabel ?? <span className="font-mono text-slate-400">{log.entityId.slice(0, 8)}…</span>}
         </TableCell>
-        <TableCell className="text-xs text-slate-400">{log.changes?.length ?? 0}</TableCell>
+        <TableCell className="text-xs text-slate-400">{Object.keys(log.changesJson ?? {}).length || '—'}</TableCell>
         <TableCell className="text-xs text-slate-500">{log.source ?? '—'}</TableCell>
         <TableCell className="text-xs text-slate-300 font-mono">{log.ipAddress ?? '—'}</TableCell>
       </TableRow>

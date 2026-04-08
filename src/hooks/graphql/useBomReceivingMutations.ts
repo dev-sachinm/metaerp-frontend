@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { executeGraphQL } from '@/graphql/client'
 import {
   RECEIVE_STANDARD_PARTS,
+  UPDATE_MANUFACTURED_QTY,
   UPDATE_MANUFACTURED_RECEIVED_QTY,
   UPDATE_MANUFACTURED_STATUS_BULK,
   UPDATE_STANDARD_PART_PURCHASE_UNIT_PRICE,
@@ -40,6 +41,21 @@ export function useUpdateManufacturedStatusBulk(fixtureId: string) {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update status'))
+    },
+  })
+}
+
+export function useUpdateManufacturedQty(fixtureId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { partId: string; qty: number }) =>
+      executeGraphQL(UPDATE_MANUFACTURED_QTY, { partId: vars.partId, qty: vars.qty }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      toast.success('Quantity updated')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update quantity'))
     },
   })
 }

@@ -94,7 +94,9 @@ export function PurchaseOrdersList() {
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Vendor / Supplier</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3">Costing Date</th>
+                  <th className="px-4 py-3">Completed</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -121,7 +123,13 @@ export function PurchaseOrdersList() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {po.poSendDate ? format(new Date(po.poSendDate), 'dd MMM yyyy') : '—'}
+                      {po.createdAt ? format(new Date(po.createdAt), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {po.costingUpdatedDate ? format(new Date(po.costingUpdatedDate), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {po.completedDate ? format(new Date(po.completedDate), 'dd MMM yyyy') : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">

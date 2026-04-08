@@ -64,6 +64,10 @@ export interface ManufacturedPart {
   unitSeq: number
   partSeq: number
   drawingFileS3Key?: string | null
+  pendingAt?: string | null
+  inprogressAt?: string | null
+  qualityCheckedAt?: string | null
+  receivedAt?: string | null
 }
 
 export interface StandardPart {
@@ -108,6 +112,14 @@ export interface DrawingViewUrl {
 }
 
 // ── BOM Parse (Step 2) ────────────────────────────────────────────────────────
+export type BomChangeStatus = 'changed' | 'unchanged' | 'new' | null
+
+export interface BomChangeEntry {
+  field: string       // "description" | "quantity" | "lhRh" | "drawingFile"
+  oldValue: string | null   // current DB value
+  newValue: string | null   // parsed BOM value
+}
+
 export interface ParsedManufacturedPart {
   drawingNo: string
   description: string
@@ -121,10 +133,16 @@ export interface ParsedManufacturedPart {
   parsedDrawingNo?: string | null
   hasDrawing: boolean
   isDuplicateInProject?: boolean
-  duplicateFixtures?: { id: string; fixtureNumber: string }[]
+  duplicateFixtures?: { id: string; fixtureNumber: string; qty?: number | null }[]
   fixtureExists?: boolean
   existingFixtureId?: string | null
   existingFixtureNumber?: string | null
+  // Re-upload diff fields
+  changeStatus?: BomChangeStatus
+  changes?: BomChangeEntry[]
+  existingStatus?: string | null
+  existingRowId?: string | null
+  drawingFileChanged?: boolean
 }
 
 export interface ParsedStandardPart {
@@ -139,6 +157,10 @@ export interface ParsedStandardPart {
   wrongEntryReason?: string | null
   fixtureSeq?: number | null
   unitSeq?: number | null
+  // Re-upload diff fields
+  changeStatus?: BomChangeStatus
+  changes?: BomChangeEntry[]
+  existingRowId?: string | null
 }
 
 export interface WrongEntry {
@@ -154,6 +176,11 @@ export interface ParseBomSummary {
   duplicateDrawingCount?: number
   newFixtureSeqs?: number[]
   existingFixtureSeqs?: number[]
+  // Re-upload summary
+  changedCount?: number
+  unchangedCount?: number
+  newCount?: number
+  notUpdatableCount?: number
 }
 
 export interface ParsedBom {

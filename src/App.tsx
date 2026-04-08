@@ -110,6 +110,9 @@ function AppContent() {
   const isInitialized = useIsInitialized()
   const user = useAuthStore((state) => state.user)
 
+  // All hooks must be called before any early returns (Rules of Hooks)
+  useEnabledModulesQuery({ enabled: !!user })
+
   if (!isInitialized && initTimedOut) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-rose-50 p-6">
@@ -141,9 +144,6 @@ function AppContent() {
       </div>
     )
   }
-
-  // Fetch enabled modules when user is logged in (tenant context); store drives nav and RequireModule
-  useEnabledModulesQuery({ enabled: !!user })
 
   return (
     <Routes>

@@ -12,8 +12,8 @@ import { UserFieldsFragment, UserDetailFragment } from '../fragments/user.fragme
 export const GET_USERS = `
   ${UserFieldsFragment}
   
-  query GetUsers($skip: Int!, $limit: Int!) {
-    users(skip: $skip, limit: $limit) {
+  query GetUsers($skip: Int!, $limit: Int!, $roleId: String) {
+    users(skip: $skip, limit: $limit, roleId: $roleId) {
       items {
         ...UserFields
       }

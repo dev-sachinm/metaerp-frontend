@@ -3,14 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { PermissionGuard } from '@/components/PermissionGuard'
 import { useCurrentUser, usePermissions } from '@/stores/authStore'
-import { useEntityActions, useCanAccess, useUIPermission } from '@/hooks/usePermissions'
+import { useEntityActions, useUIPermission } from '@/hooks/usePermissions'
 import { AuditLogWidget } from '@/components/AuditLogWidget'
 import { DashboardLayout } from '@/layouts/DashboardLayout'
 
 export default function Home() {
   const user = useCurrentUser()
   const permissions = usePermissions()
-  const { canCreate: canCreateUser, canUpdate: canUpdateUser, canDelete: canDeleteUser, canList: canListUser } = useEntityActions('user')
+  const { canCreate: canCreateUser, canRead: canReadUser, canUpdate: canUpdateUser, canDelete: canDeleteUser, canList: canListUser } = useEntityActions('user')
   const canSeeAuditWidget = useUIPermission('AUDIT_LOGS_WIDGET')
 
   return (
@@ -90,8 +90,8 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span>Read</span>
-                    <Badge variant={useCanAccess('user', 'read') ? 'success' : 'outline'}>
-                      {useCanAccess('user', 'read') ? '✓' : '✗'}
+                    <Badge variant={canReadUser ? 'success' : 'outline'}>
+                      {canReadUser ? '✓' : '✗'}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,13 +23,20 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileText,
+  Search,
+  X,
 } from 'lucide-react'
-import { useBomView } from '@/hooks/graphql/useDesignItemCode'
+import { useBomView, type BomViewFilters } from '@/hooks/graphql/useDesignItemCode'
+import { format } from 'date-fns'
+import type { DateRange } from 'react-day-picker'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { fetchDrawingViewUrl } from '@/hooks/graphql/useDesign'
 import { useSuppliers, useVendors } from '@/hooks/graphql/useMasterDataQueries'
 import { useCurrentUser } from '@/stores/authStore'
 import { useCreateManufacturedPo, useCreateStandardPo } from '@/hooks/graphql/usePurchaseOrderMutations'
 import {
+  useUpdateManufacturedQty,
   useUpdateManufacturedReceivedQty,
   useUpdateManufacturedStatusBulk,
   useUpdateStandardPartPurchaseUnitPrice,
@@ -37,9 +44,67 @@ import {
 import { useUIPermission, useCanAccess } from '@/hooks/usePermissions'
 import { formatManufacturedStatus, MANUFACTURED_PART_STATUS_OPTIONS } from '@/lib/bomManufacturedStatuses'
 import type { ManufacturedPart, StandardPart, FixtureSummary } from '@/types/design'
-import { toast } from 'sonner'
 import { FIXTURE_STATUS_LABELS } from '@/types/design'
 import type { FixtureStatus } from '@/types/design'
+
+// ── Date range filter picker (compact inline) ─────────────────────────────────
+interface DateRangeFilterProps {
+  label: string
+  color: string
+  range: DateRange | undefined
+  onChange: (range: DateRange | undefined) => void
+}
+
+function DateRangeFilter({ label, color, range, onChange }: DateRangeFilterProps) {
+  const hasValue = range?.from
+  const display = range?.from
+    ? range.to && range.to.getTime() !== range.from.getTime()
+      ? `${format(range.from, 'dd MMM')}–${format(range.to, 'dd MMM')}`
+      : format(range.from, 'dd MMM yy')
+    : ''
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className={`w-full h-[30px] text-xs px-1.5 rounded border flex items-center gap-1 transition-colors
+            ${hasValue
+              ? `border-indigo-300 bg-indigo-50 ${color} font-medium`
+              : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300'
+            }`}
+        >
+          <Search className="h-3 w-3 shrink-0 opacity-50" />
+          <span className="truncate flex-1 text-left">{display || label}</span>
+          {hasValue && (
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); onChange(undefined) }}
+              className="ml-auto shrink-0 text-slate-400 hover:text-slate-600"
+            >
+              <X className="h-3 w-3" />
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Calendar
+          mode="range"
+          selected={range}
+          onSelect={onChange}
+          captionLayout="dropdown"
+          numberOfMonths={1}
+          defaultMonth={range?.from ?? new Date()}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 // ── Status chip ───────────────────────────────────────────────────────────────
 const STATUS_COLORS: Partial<Record<FixtureStatus, string>> = {
@@ -84,13 +149,14 @@ function ViewDrawingBtn({ partId }: { partId: string }) {
   )
 }
 
+function fmtStatusDate(iso: string | null | undefined) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+}
+
 // ── Manufactured part row ─────────────────────────────────────────────────────
-function ManufacturedPartRow({
-  part,
-  checkbox,
-  storeReceiving,
-  showReceiveQty,
-}: {
+type ManufacturedPartRowProps = {
   part: ManufacturedPart
   checkbox?: { checked: boolean; onToggle: () => void; disabled?: boolean }
   storeReceiving?: {
@@ -103,8 +169,26 @@ function ManufacturedPartRow({
     onCancel: () => void
     saving: boolean
   }
+  qtyEditing?: {
+    enabled: boolean
+    editing: boolean
+    draft: string
+    onDraft: (v: string) => void
+    onBeginEdit: () => void
+    onSave: () => void
+    onCancel: () => void
+    saving: boolean
+  }
   showReceiveQty?: boolean
-}) {
+}
+
+function ManufacturedPartRow({
+  part,
+  checkbox,
+  storeReceiving,
+  qtyEditing,
+  showReceiveQty,
+}: ManufacturedPartRowProps) {
   return (
     <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
       {checkbox && (
@@ -121,14 +205,69 @@ function ManufacturedPartRow({
       )}
       <td className="py-1.5 px-2 text-xs font-mono text-slate-500 whitespace-nowrap">{part.drawingNo}</td>
       <td className="py-1.5 px-2 text-xs text-slate-700 max-w-[160px] truncate" title={part.description}>{part.description}</td>
-      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap text-center">
-        {part.qty != null ? part.qty : '—'}
+      <td className="py-1.5 px-2 text-xs whitespace-nowrap text-center">
+        {qtyEditing?.editing ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Input
+              className="h-7 text-xs px-1.5 py-0 w-16 text-center border-indigo-400 ring-1 ring-indigo-300"
+              type="number"
+              step="any"
+              min={0}
+              value={qtyEditing.draft}
+              onChange={(e) => qtyEditing.onDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !qtyEditing.saving) qtyEditing.onSave()
+                if (e.key === 'Escape') qtyEditing.onCancel()
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-7 w-7 rounded bg-green-50 border border-green-300 text-green-700 hover:bg-green-100 hover:border-green-400 disabled:opacity-40 transition-colors text-sm font-bold"
+              disabled={qtyEditing.saving}
+              onClick={qtyEditing.onSave}
+              title="Save"
+            >✓</button>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-7 w-7 rounded bg-slate-100 border border-slate-300 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors text-sm font-bold"
+              onClick={qtyEditing.onCancel}
+              title="Cancel"
+            >✕</button>
+          </span>
+        ) : qtyEditing?.enabled ? (
+          <button
+            type="button"
+            onClick={qtyEditing.onBeginEdit}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors group"
+            title="Click to edit quantity"
+          >
+            <span>{part.qty != null ? part.qty : '—'}</span>
+            <svg className="h-3 w-3 opacity-40 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828A2 2 0 0110 16.414V19h2.586a2 2 0 001.414-.586l6.293-6.293" />
+            </svg>
+          </button>
+        ) : (
+          <span className="text-slate-500">{part.qty != null ? part.qty : '—'}</span>
+        )}
       </td>
       <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap text-center">
         {part.lhRh ?? '—'}
       </td>
       <td className="py-1.5 px-2 text-xs text-slate-600 max-w-[110px] truncate" title={part.status ?? ''}>
         {formatManufacturedStatus(part.status)}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap">
+        {fmtStatusDate(part.pendingAt) ?? <span className="text-slate-300">—</span>}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-blue-600 whitespace-nowrap">
+        {fmtStatusDate(part.inprogressAt) ?? <span className="text-slate-300">—</span>}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-amber-600 whitespace-nowrap">
+        {fmtStatusDate(part.qualityCheckedAt) ?? <span className="text-slate-300">—</span>}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-green-600 whitespace-nowrap">
+        {fmtStatusDate(part.receivedAt) ?? <span className="text-slate-300">—</span>}
       </td>
       {showReceiveQty && (
         <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-mono">
@@ -189,8 +328,6 @@ function ManufacturedPartRow({
   )
 }
 
-type ManufacturedPartRowProps = Parameters<typeof ManufacturedPartRow>[0]
-
 // ── Unit section (inside a fixture) ──────────────────────────────────────────
 function UnitSection({
   unitSeq,
@@ -198,6 +335,7 @@ function UnitSection({
   stdParts = [],
   mfgCheckbox,
   storeReceivingForPart,
+  qtyEditingForPart,
   poMode,
   stdSelectedIds,
   onToggleStdPart,
@@ -220,6 +358,7 @@ function UnitSection({
     isItemDisabled?: (p: ManufacturedPart) => boolean;
   }
   storeReceivingForPart?: (part: ManufacturedPart) => ManufacturedPartRowProps['storeReceiving']
+  qtyEditingForPart?: (part: ManufacturedPart) => ManufacturedPartRowProps['qtyEditing']
   poMode?: boolean
   stdSelectedIds?: Set<string>
   onToggleStdPart?: (id: string) => void
@@ -283,6 +422,10 @@ function UnitSection({
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Qty</th>
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">LH/RH</th>
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Status</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Pending Date</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">In Progress Date</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">QC Date</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Received Date</th>
                     {storeMode && (
                       <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Receive Qty</th>
                     )}
@@ -304,6 +447,7 @@ function UnitSection({
                           : undefined
                       }
                       storeReceiving={storeReceivingForPart?.(p)}
+                      qtyEditing={qtyEditingForPart?.(p)}
                       showReceiveQty={storeMode}
                     />
                   ))}
@@ -573,8 +717,8 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   // const canManageReceiving = useUIPermission('MANAGE_BOM_RECEIVING')
   const currentUser = useCurrentUser()
   const userRoles = currentUser?.roles || []
-  const isManufacturing = userRoles.includes('Manufacturing')
-  const isPurchase = userRoles.includes('Procurement')
+  const isManufacturing = userRoles.some(r => r === 'Manufacturing')
+  const isPurchase = userRoles.some(r => r === 'Procurement')
 
   const { data: vendorsData } = useVendors(1, 500, { isActive: true }, { enabled: isManufacturing })
   const { data: suppliersData } = useSuppliers(1, 500, { isActive: true }, { enabled: isPurchase })
@@ -582,6 +726,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const createStdPo = useCreateStandardPo(fixture.id)
   const bulkMfgStatus = useUpdateManufacturedStatusBulk(fixture.id)
   const updateRecvQty = useUpdateManufacturedReceivedQty(fixture.id)
+  const updateMfgQty = useUpdateManufacturedQty(fixture.id)
   const updateStdPrice = useUpdateStandardPartPurchaseUnitPrice(fixture.id)
 
   // const canCreatePo = useUIPermission('CREATE_PURCHASE_ORDER_PO')
@@ -595,11 +740,12 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
   const capabilities = useMemo(() => {
     
-    const isStore = userRoles.includes('Inventory Manager(Store Keeper)')
-    const isPurchase = userRoles.includes('Procurement')
-    const isManufacturing = userRoles.includes('Manufacturing')
-    const isQualityCheck = userRoles.includes('Quality')
-    const isDesigner = userRoles.includes('Design')
+    const hasRole = (name: string) => userRoles.some(r => r === name)
+    const isStore = hasRole('Inventory Manager(Store Keeper)')
+    const isPurchase = hasRole('Procurement')
+    const isManufacturing = hasRole('Manufacturing')
+    const isQualityCheck = hasRole('Quality')
+    const isDesigner = hasRole('Design')
     
     // If the user has a mix of roles, we combine their capabilities
     const hasAnyRole = isStore || isPurchase || isManufacturing || isQualityCheck || isDesigner
@@ -613,6 +759,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
       canMarkQualityChecked: isQualityCheck,
       canMarkReceived: isStore,
       canUpdateStdQty: isStore,
+      canEditMfgQty: isDesigner,
       showMfgParts: true, // Everyone can see mfg parts by default
       // Mfg and QC don't see standard parts unless they also have other roles
       showStdParts: isDesigner || isPurchase || isStore || !hasAnyRole,
@@ -643,10 +790,66 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const [bulkDlgOpen, setBulkDlgOpen] = useState(false)
   const [recvEditId, setRecvEditId] = useState<string | null>(null)
   const [recvDraftQty, setRecvDraftQty] = useState('')
+  const [qtyEditId, setQtyEditId] = useState<string | null>(null)
+  const [qtyDraft, setQtyDraft] = useState('')
   const [priceDraftByLine, setPriceDraftByLine] = useState<Record<string, string>>({})
   const [savingPriceLineId, setSavingPriceLineId] = useState<string | null>(null)
 
-  const { data, isLoading, isError, error } = useBomView(expanded ? fixture.id : null, expanded)
+  const [filterDraft, setFilterDraft] = useState<BomViewFilters>({})
+  const [filters, setFilters] = useState<BomViewFilters>({})
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Date range state — keyed by field prefix
+  const [pendingRange, setPendingRange] = useState<DateRange | undefined>()
+  const [inprogressRange, setInprogressRange] = useState<DateRange | undefined>()
+  const [qcRange, setQcRange] = useState<DateRange | undefined>()
+  const [receivedRange, setReceivedRange] = useState<DateRange | undefined>()
+
+  const toIsoStart = (d: Date) => {
+    const copy = new Date(d); copy.setHours(0, 0, 0, 0); return copy.toISOString()
+  }
+  const toIsoEnd = (d: Date) => {
+    const copy = new Date(d); copy.setHours(23, 59, 59, 999); return copy.toISOString()
+  }
+
+  const applyDateRange = useCallback((
+    setter: (r: DateRange | undefined) => void,
+    fromKey: keyof BomViewFilters,
+    toKey: keyof BomViewFilters,
+    range: DateRange | undefined
+  ) => {
+    setter(range)
+    setFilters((prev) => ({
+      ...prev,
+      [fromKey]: range?.from ? toIsoStart(range.from) : undefined,
+      [toKey]: range?.to ? toIsoEnd(range.to) : range?.from ? toIsoEnd(range.from) : undefined,
+    }))
+  }, [])
+
+  const updateFilter = useCallback((key: keyof BomViewFilters, value: string) => {
+    setFilterDraft((prev) => ({ ...prev, [key]: value }))
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, [key]: value || undefined }))
+    }, 400)
+  }, [])
+
+  const clearFilters = useCallback(() => {
+    setFilterDraft({})
+    setFilters({})
+    setPendingRange(undefined)
+    setInprogressRange(undefined)
+    setQcRange(undefined)
+    setReceivedRange(undefined)
+  }, [])
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
+    + (pendingRange?.from ? 1 : 0)
+    + (inprogressRange?.from ? 1 : 0)
+    + (qcRange?.from ? 1 : 0)
+    + (receivedRange?.from ? 1 : 0)
+
+  const { data, isLoading, isError, error } = useBomView(expanded ? fixture.id : null, filters, expanded)
   const bomView = data?.bomView
 
   const mfgPartIds = useMemo(
@@ -667,6 +870,8 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     setBulkStatus('')
     setRecvEditId(null)
     setRecvDraftQty('')
+    setQtyEditId(null)
+    setQtyDraft('')
     setPriceDraftByLine({})
   }, [fixture.id])
 
@@ -733,6 +938,35 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     if (qty != null && Number.isNaN(qty)) return
     await updateRecvQty.mutateAsync({ partId: recvEditId, receivedQty: qty })
     setRecvEditId(null)
+  }
+
+  const beginQtyEdit = (part: ManufacturedPart) => {
+    setQtyEditId(part.id)
+    setQtyDraft(part.qty != null ? String(part.qty) : '')
+  }
+
+  const saveQtyEdit = async () => {
+    if (!qtyEditId) return
+    const raw = qtyDraft.trim()
+    const qty = parseFloat(raw)
+    if (raw === '' || Number.isNaN(qty)) return
+    await updateMfgQty.mutateAsync({ partId: qtyEditId, qty })
+    setQtyEditId(null)
+  }
+
+  const qtyEditingForPart = (part: ManufacturedPart): ManufacturedPartRowProps['qtyEditing'] => {
+    if (!capabilities.canEditMfgQty || (part.status ?? 'pending') !== 'pending') return undefined
+    const editing = qtyEditId === part.id
+    return {
+      enabled: true,
+      editing,
+      draft: qtyDraft,
+      onDraft: setQtyDraft,
+      onBeginEdit: () => beginQtyEdit(part),
+      onSave: () => void saveQtyEdit(),
+      onCancel: () => setQtyEditId(null),
+      saving: updateMfgQty.isPending,
+    }
   }
 
   const storeReceivingForPart = (part: ManufacturedPart): ManufacturedPartRowProps['storeReceiving'] => {
@@ -836,6 +1070,14 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
         {/* Status */}
         <StatusChip status={fixture.status as FixtureStatus} />
 
+        {/* Active filter indicator */}
+        {activeFilterCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5">
+            <Search className="h-3 w-3" />
+            {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active
+          </span>
+        )}
+
         {/* BOM state */}
         {fixture.bomFilename ? (
           <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-100 rounded-full px-2 py-0.5">
@@ -871,6 +1113,8 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
       {/* Expanded BOM content */}
       {expanded && (
         <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-4 space-y-3">
+
+
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-slate-500 py-2">
               <Loader /> Loading BOM…
@@ -902,6 +1146,97 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
               {/* Parts grouped by unit */}
               {filteredSortedUnits.length > 0 && (
                 <div className="space-y-4">
+
+                  {/* ── Filter bar ── */}
+                  <div className="rounded border border-slate-200 bg-white overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/60">
+                          {/* Search icon / Reset button */}
+                          <th className="px-2 py-1.5 text-left font-medium text-slate-400 whitespace-nowrap w-8">
+                            <span className="flex items-center gap-1">
+                              {activeFilterCount > 0
+                                ? <button type="button" onClick={(e) => { e.stopPropagation(); clearFilters() }} className="text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5"><X className="h-2.5 w-2.5" />Reset ({activeFilterCount})</button>
+                                : <Search className="h-3 w-3 text-slate-400" />
+                              }
+                            </span>
+                          </th>
+                          {/* Drawing No — 160→144px (-10%), height 32→29px */}
+                          <th className="py-1.5 w-[144px] min-w-[144px]">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Drawing No"
+                                value={filterDraft.drawingNo ?? ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => updateFilter('drawingNo', e.target.value)}
+                                style={{ height: '29px' }}
+                                className="w-full text-xs border border-slate-200 rounded px-2 pr-6 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300"
+                              />
+                              {filterDraft.drawingNo && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); updateFilter('drawingNo', '') }}
+                                  className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                          {/* Description — 220→198px (-10%), height 32→29px */}
+                          <th className="pl-8 pr-1 py-1.5 min-w-[198px]">
+                            <div className="relative">
+                              <input type="text" placeholder="Description" value={filterDraft.drawingDesc ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('drawingDesc', e.target.value)} style={{ height: '29px' }} className="w-full text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300" />
+                              {filterDraft.drawingDesc && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('drawingDesc', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                            </div>
+                          </th>
+                          {/* Qty / LH/RH / Status — spacers */}
+                          <th className="px-1 py-1.5 w-10" />
+                          <th className="px-1 py-1.5 w-10" />
+                          <th className="px-1 py-1.5 w-20" />
+                          {/* Pending Date — 133→106px (-20%) */}
+                          <th className="py-1.5 min-w-[106px]">
+                            <DateRangeFilter label="Pending Date" color="text-slate-600" range={pendingRange} onChange={(r) => applyDateRange(setPendingRange, 'pendingDateFrom', 'pendingDateTo', r)} />
+                          </th>
+                          {/* In Progress Date — 143→114px (-20%) */}
+                          <th className="py-1.5 min-w-[114px]">
+                            <DateRangeFilter label="In Progress Date" color="text-blue-600" range={inprogressRange} onChange={(r) => applyDateRange(setInprogressRange, 'inprogressDateFrom', 'inprogressDateTo', r)} />
+                          </th>
+                          {/* QC Date — 114→91px (-20%) */}
+                          <th className="py-1.5 min-w-[91px]">
+                            <DateRangeFilter label="QC Date" color="text-amber-600" range={qcRange} onChange={(r) => applyDateRange(setQcRange, 'qcDateFrom', 'qcDateTo', r)} />
+                          </th>
+                          {/* Received Date — 133→106px (-20%) */}
+                          <th className="py-1.5 min-w-[106px]">
+                            <DateRangeFilter label="Received Date" color="text-green-600" range={receivedRange} onChange={(r) => applyDateRange(setReceivedRange, 'receivedDateFrom', 'receivedDateTo', r)} />
+                          </th>
+                          {/* Std Item Code — 100→115px (+15%) */}
+                          <th className="px-1 py-1.5 w-[115px] min-w-[115px]">
+                            <div className="relative">
+                              <input type="text" placeholder="Std Item Code" value={filterDraft.stdPartNo ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdPartNo', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                              {filterDraft.stdPartNo && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdPartNo', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                            </div>
+                          </th>
+                          {/* Std Name — 110→127px (+15%) */}
+                          <th className="px-1 py-1.5 w-[127px] min-w-[127px]">
+                            <div className="relative">
+                              <input type="text" placeholder="Std Part Name" value={filterDraft.stdName ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdName', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                              {filterDraft.stdName && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdName', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                            </div>
+                          </th>
+                          {/* Std Make — 90→104px (+15%) */}
+                          <th className="px-1 py-1.5 w-[104px] min-w-[104px]">
+                            <div className="relative">
+                              <input type="text" placeholder="Std Make" value={filterDraft.stdMake ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdMake', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                              {filterDraft.stdMake && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdMake', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+
                   {/* Global Actions */}
                   {(capabilities.canCreateVendorPo || capabilities.canCreateSupplierPo || capabilities.canMarkQualityChecked || capabilities.canMarkReceived) && (
                     <div className="flex flex-wrap gap-4 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
@@ -916,8 +1251,13 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                           
                           {capabilities.canCreateVendorPo && (
                             <div className="flex flex-wrap items-end gap-2">
-                              <Button type="button" size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8" disabled={selMfg.size === 0} onClick={(e) => { e.stopPropagation(); setMfgDlgOpen(true) }}>
-                                PO for Vendor…
+                              <Button type="button" size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 gap-1.5" disabled={selMfg.size === 0} onClick={(e) => { e.stopPropagation(); setMfgDlgOpen(true) }}>
+                                Send PO to Vendor
+                                {selMfg.size > 0 && (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1">
+                                    {selMfg.size}
+                                  </span>
+                                )}
                               </Button>
                             </div>
                           )}
@@ -992,6 +1332,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                             : undefined
                         }
                         storeReceivingForPart={storeReceivingForPart}
+                        qtyEditingForPart={qtyEditingForPart}
                         poMode={capabilities.canCreateSupplierPo}
                         stdSelectedIds={selStd}
                         onToggleStdPart={toggleStd}
@@ -1017,46 +1358,66 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
       {mfgDlgOpen && (
         <Dialog open={mfgDlgOpen} onOpenChange={setMfgDlgOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Create Vendor PO</DialogTitle>
+              <DialogTitle>Send PO to Vendor</DialogTitle>
               <DialogDescription>
-                Select a vendor to create a purchase order for the selected manufacturing parts.
+                Review the selected drawings, choose a vendor, then click <strong>Create PO</strong> to generate the purchase order.
               </DialogDescription>
             </DialogHeader>
+
+            {/* Vendor selector */}
             <div className="py-2">
-              <Label className="text-xs mb-1 block">Vendor</Label>
-              <select 
-                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-                value={vendorId} 
+              <Label className="text-xs mb-1 block">Vendor <span className="text-red-500">*</span></Label>
+              <select
+                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={vendorId}
                 onChange={(e) => setVendorId(e.target.value)}
               >
-                <option value="">Select vendor…</option>
-                {vendorsData?.vendors.items.map((v) => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                <option value="">— Select vendor —</option>
+                {vendorsData?.vendors.items.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
               </select>
             </div>
-            <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-md mt-2">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="py-1 px-2 text-left font-medium text-slate-500">Drawing No</th>
-                    <th className="py-1 px-2 text-left font-medium text-slate-500">Description</th>
-                    <th className="py-1 px-2 text-center font-medium text-slate-500">Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bomView?.manufacturedParts
-                    .filter(p => selMfg.has(p.id))
-                    .map(p => (
-                      <tr key={p.id}>
-                        <td className="py-1 px-2 font-mono text-slate-600">{p.drawingNo}</td>
-                        <td className="py-1 px-2 text-slate-700 truncate max-w-[200px]">{p.description}</td>
-                        <td className="py-1 px-2 text-center">{p.qty ?? '—'}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+
+            {/* Selected parts preview — all columns */}
+            <div className="mt-1">
+              <p className="text-xs font-medium text-slate-500 mb-1">
+                Selected drawings ({selMfg.size})
+              </p>
+              <div className="max-h-[320px] overflow-y-auto border border-slate-200 rounded-md">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                    <tr>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500 whitespace-nowrap">Drawing No</th>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500">Description</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500 whitespace-nowrap">Qty</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500 whitespace-nowrap">LH / RH</th>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500 whitespace-nowrap">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bomView?.manufacturedParts
+                      .filter(p => selMfg.has(p.id))
+                      .map(p => (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-2 font-mono text-slate-700 whitespace-nowrap">{p.drawingNo}</td>
+                          <td className="py-1.5 px-2 text-slate-700 max-w-[220px] truncate" title={p.description ?? ''}>{p.description ?? '—'}</td>
+                          <td className="py-1.5 px-2 text-center text-slate-600">{p.qty ?? '—'}</td>
+                          <td className="py-1.5 px-2 text-center text-slate-600">{p.lhRh ?? '—'}</td>
+                          <td className="py-1.5 px-2">
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 border-slate-200">
+                              {formatManufacturedStatus(p.status)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
             <DialogFooter className="gap-2 sm:gap-0 mt-4">
               <Button type="button" variant="outline" onClick={() => setMfgDlgOpen(false)}>
                 Cancel
@@ -1064,14 +1425,10 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
               <Button
                 type="button"
                 className="bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => {
-                  void handleConfirmMfg()
-                  // Based on requirement: automatically changes to InProgress (stubbed here for future backend hook)
-                  toast.success('Manufacturing parts marked as InProgress')
-                }}
+                onClick={() => void handleConfirmMfg()}
                 disabled={createMfgPo.isPending || !vendorId || selMfg.size === 0}
               >
-                {createMfgPo.isPending ? 'Creating…' : 'Confirm'}
+                {createMfgPo.isPending ? 'Creating PO…' : 'Create PO'}
               </Button>
             </DialogFooter>
           </DialogContent>

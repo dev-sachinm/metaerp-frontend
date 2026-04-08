@@ -16,6 +16,11 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 
 // Type definitions (aligned with BACKEND_IMPLEMENTATION_STATE.md UserType)
+export interface UserRole {
+  id: string;
+  name: string;
+}
+
 export interface User {
   id: string;
   firstName?: string;
@@ -25,7 +30,7 @@ export interface User {
   username?: string;
   email: string;
   isActive: boolean;
-  roles: string[];
+  roles: UserRole[];
 }
 
 export interface PaginatedUsers {
@@ -43,6 +48,7 @@ export interface PaginatedUsers {
 export interface GetUsersVariables {
   skip: number;
   limit: number;
+  roleId?: string | null;
 }
 
 /**
@@ -52,7 +58,7 @@ export interface GetUsersVariables {
 export const userKeys = {
   all: ['users'] as const,
   lists: () => [...userKeys.all, 'list'] as const,
-  list: (params?: GetUsersVariables) => [...userKeys.lists(), params] as const,
+  list: (params?: GetUsersVariables) => [...userKeys.lists(), params ?? {}] as const,
   details: () => [...userKeys.all, 'detail'] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
   current: () => [...userKeys.all, 'current'] as const,
@@ -65,12 +71,12 @@ export const userKeys = {
  * @param skip - Number of records to skip
  * @param limit - Number of records to fetch
  */
-export function useUsers(skip: number = 0, limit: number = 50) {
+export function useUsers(skip: number = 0, limit: number = 50, roleId?: string | null) {
   return useQuery({
-    queryKey: userKeys.list({ skip, limit }),
-    queryFn: () => executeGraphQL<PaginatedUsers>(GET_USERS, { skip, limit }),
-    staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000, // 5 minutes
-    gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000, // 10 minutes
+    queryKey: userKeys.list({ skip, limit, roleId }),
+    queryFn: () => executeGraphQL<PaginatedUsers>(GET_USERS, { skip, limit, ...(roleId ? { roleId } : {}) }),
+    staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000,
+    gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000,
   });
 }
 

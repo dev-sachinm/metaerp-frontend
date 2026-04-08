@@ -5,7 +5,15 @@ export const GET_BOM_VIEW_ITEM_CODE = `
     $drawingDesc: String,
     $stdPartNo: String,
     $stdName: String,
-    $stdMake: String
+    $stdMake: String,
+    $pendingDateFrom: DateTime,
+    $pendingDateTo: DateTime,
+    $inprogressDateFrom: DateTime,
+    $inprogressDateTo: DateTime,
+    $qcDateFrom: DateTime,
+    $qcDateTo: DateTime,
+    $receivedDateFrom: DateTime,
+    $receivedDateTo: DateTime
   ) {
     bomView(
       fixtureId: $fixtureId
@@ -14,12 +22,21 @@ export const GET_BOM_VIEW_ITEM_CODE = `
       standardPartItemCodeContains: $stdPartNo
       standardPartNameContains: $stdName
       standardPartMakeContains: $stdMake
+      pendingDateFrom: $pendingDateFrom
+      pendingDateTo: $pendingDateTo
+      inprogressDateFrom: $inprogressDateFrom
+      inprogressDateTo: $inprogressDateTo
+      qcDateFrom: $qcDateFrom
+      qcDateTo: $qcDateTo
+      receivedDateFrom: $receivedDateFrom
+      receivedDateTo: $receivedDateTo
     ) {
       fixture { id fixtureNumber status }
       manufacturedParts {
         id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
         vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
+        pendingAt inprogressAt qualityCheckedAt receivedAt
       }
       standardParts {
         id fixtureId productId unitId supplierId supplierName
@@ -47,6 +64,10 @@ export const PARSE_PROJECT_BOM_FILE_ITEM_CODE = `
         existingFixtureSeqs
         bomFixtureSeq
         fixtureMismatchCount
+        changedCount
+        unchangedCount
+        newCount
+        notUpdatableCount
       }
       manufacturedParts {
         drawingNo
@@ -61,10 +82,15 @@ export const PARSE_PROJECT_BOM_FILE_ITEM_CODE = `
         parsedDrawingNo
         hasDrawing
         isDuplicateInProject
-        duplicateFixtures { id fixtureNumber }
+        duplicateFixtures { id fixtureNumber qty }
         fixtureExists
         existingFixtureId
         existingFixtureNumber
+        changeStatus
+        changes { field oldValue newValue }
+        existingStatus
+        existingRowId
+        drawingFileChanged
       }
       standardParts {
         drawingNo
@@ -78,6 +104,9 @@ export const PARSE_PROJECT_BOM_FILE_ITEM_CODE = `
         wrongEntryReason
         fixtureSeq
         unitSeq
+        changeStatus
+        changes { field oldValue newValue }
+        existingRowId
       }
       wrongEntries { rowNum rawValue reason }
     }
@@ -92,6 +121,10 @@ export const PARSE_BOM_FILE_ITEM_CODE = `
         totalStandard
         wrongEntryCount
         duplicateDrawingCount
+        changedCount
+        unchangedCount
+        newCount
+        notUpdatableCount
       }
       manufacturedParts {
         drawingNo
@@ -106,7 +139,12 @@ export const PARSE_BOM_FILE_ITEM_CODE = `
         parsedDrawingNo
         hasDrawing
         isDuplicateInProject
-        duplicateFixtures { id fixtureNumber }
+        duplicateFixtures { id fixtureNumber qty }
+        changeStatus
+        changes { field oldValue newValue }
+        existingStatus
+        existingRowId
+        drawingFileChanged
       }
       standardParts {
         drawingNo
@@ -120,6 +158,9 @@ export const PARSE_BOM_FILE_ITEM_CODE = `
         wrongEntryReason
         fixtureSeq
         unitSeq
+        changeStatus
+        changes { field oldValue newValue }
+        existingRowId
       }
       wrongEntries { rowNum rawValue reason }
     }

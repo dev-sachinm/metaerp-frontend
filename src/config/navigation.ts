@@ -7,8 +7,15 @@
 export interface NavItemConfig {
   /** Backend module id (e.g. core, master_data) */
   moduleId: string
-  /** Entity name for permission check; omit for non-entity links (e.g. Dashboard) */
+  /** Single entity name for permission check; omit for non-entity links (e.g. Dashboard) */
   entity?: string
+  /**
+   * Alternative entity names (OR-logic): item is visible if user has permission on
+   * `entity` OR any entry in `entityFallbacks`. Useful when different roles have
+   * permissions on related but distinct entities (e.g. Manufacturing has fixture_bom
+   * but not project).
+   */
+  entityFallbacks?: string[]
   path: string
   label: string
   /** If set, user must have THIS specific action (not just any) on the entity */
@@ -47,7 +54,9 @@ export const NAV_ITEMS: NavItemConfig[] = [
   },
   {
     moduleId: 'project_management',
-    entity: 'project',
+    // No entity check — all roles that use project_management (Manufacturing, Design, Quality,
+    // Procurement, Store) need to reach the Projects/BomTree page even if they lack project.read.
+    // Route-level access is already guarded by RequireModule('project_management').
     path: '/projects',
     label: 'Projects',
     icon: 'project',

@@ -22,6 +22,14 @@ export const UPDATE_MANUFACTURED_RECEIVED_QTY = `
   }
 `
 
+export const UPDATE_MANUFACTURED_QTY = `
+  mutation UpdateManufacturedQty($partId: String!, $qty: Float!) {
+    updateManufacturedQty(partId: $partId, qty: $qty) {
+      id drawingNo qty status fixtureId
+    }
+  }
+`
+
 export const UPDATE_STANDARD_PART_PURCHASE_UNIT_PRICE = `
   mutation UpdateStandardPartPurchaseUnitPrice($standardPartId: String!, $purchaseUnitPrice: Float) {
     updateStandardPartPurchaseUnitPrice(standardPartId: $standardPartId, purchaseUnitPrice: $purchaseUnitPrice) {

@@ -18,6 +18,7 @@ import { useEntityActions, useAccessibleFields, canShowColumn } from '@/hooks/us
 import { PermissionGuard } from '@/components/PermissionGuard'
 import { Loader } from '@/components/Loader'
 import { useInfiniteUsers, useDeleteUser, type User } from '@/hooks/graphql/useUsersQuery'
+import { useGetAllRoles } from '@/hooks/graphql/useUserRolesAccess'
 import {
   useReactTable,
   getCoreRowModel,
@@ -50,6 +51,10 @@ const columnHelper = createColumnHelper<User>()
 export function UsersList() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('')
+
+  const { canUpdate, canDelete } = useEntityActions('user')
+  const { canRead: canReadRoles } = useEntityActions('role')
 
   const batchSize = Number(import.meta.env.VITE_GRAPHQL_BATCH_SIZE) || 1000
   const pageSize = Number(import.meta.env.VITE_TABLE_PAGE_SIZE) || 50
@@ -65,14 +70,16 @@ export function UsersList() {
     refetch,
   } = useInfiniteUsers(batchSize)
 
-  const { canUpdate, canDelete } = useEntityActions('user')
   const deleteUser = useDeleteUser()
   const readableFields = useAccessibleFields('user', 'read')
+  const { data: rolesData } = useGetAllRoles()
+  const allRoles = canReadRoles ? (rolesData?.getRoles ?? []) : []
 
-  const allUsers = useMemo(
-    () => data?.pages.flatMap((page) => page.users.items) ?? [],
-    [data]
-  )
+  const allUsers = useMemo(() => {
+    const users = data?.pages.flatMap((page) => page.users.items) ?? []
+    if (!selectedRoleId) return users
+    return users.filter((u) => u.roles.some((r) => r.id === selectedRoleId))
+  }, [data, selectedRoleId])
 
   const handleManageAccess = useCallback((userId: string) => {
     if (!canUpdate) {
@@ -190,17 +197,20 @@ export function UsersList() {
         })
       )
     }
-    if (canShowColumn(readableFields, 'roles')) {
+    if (canReadRoles) {
       cols.push(
         columnHelper.accessor('roles', {
           header: 'Roles',
           cell: (info) => (
             <div className="flex gap-1 flex-wrap">
-              {(info.getValue() ?? []).map((role) => (
-                <Badge key={role} variant="secondary" className="text-xs">
-                  {role}
-                </Badge>
-              ))}
+              {(info.getValue() ?? []).length > 0
+                ? (info.getValue() ?? []).map((role) => (
+                    <Badge key={role.id} variant="secondary" className="text-xs">
+                      {role.name}
+                    </Badge>
+                  ))
+                : <span className="text-slate-400 text-xs">—</span>
+              }
             </div>
           ),
         })
@@ -272,7 +282,7 @@ export function UsersList() {
     )
 
     return cols
-  }, [readableFields, canUpdate, canDelete, deleteUser.isPending, handleManageAccess, handleEditUser, handleChangePassword, handleDeleteUser])
+  }, [readableFields, canUpdate, canDelete, canReadRoles, deleteUser.isPending, handleManageAccess, handleEditUser, handleChangePassword, handleDeleteUser])
 
   const table = useReactTable({
     data: allUsers,
@@ -343,16 +353,35 @@ export function UsersList() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <Input
                   type="text"
-                  placeholder="Search by email, name..."
+                  placeholder="Search by name, email, username..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="h-4 w-4" />
-                Filters
-              </Button>
+              {canReadRoles && (
+                <div className="relative flex items-center gap-1.5 shrink-0">
+                  <Filter className="h-4 w-4 text-slate-400 shrink-0" />
+                  <select
+                    value={selectedRoleId}
+                    onChange={(e) => setSelectedRoleId(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 min-w-[160px]"
+                  >
+                    <option value="">All roles</option>
+                    {allRoles.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                  {selectedRoleId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRoleId('')}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                      title="Clear role filter"
+                    >✕</button>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

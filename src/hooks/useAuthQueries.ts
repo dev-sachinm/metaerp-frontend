@@ -23,7 +23,9 @@ function convertGraphQLUserToAuthUser(graphqlUser: any, byRole?: Record<string, 
   const roles =
     getRoleNamesFromByRole(byRole as any).length > 0
       ? getRoleNamesFromByRole(byRole as any)
-      : (graphqlUser.roles || [])
+      : (graphqlUser.roles || []).map((r: { id: string; name: string } | string) =>
+          typeof r === 'string' ? r : r.name
+        )
   return {
     id: graphqlUser.id,
     email: graphqlUser.email ?? graphqlUser.username ?? '',

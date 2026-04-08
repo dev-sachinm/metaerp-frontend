@@ -131,24 +131,38 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
   // Show menu item only if: (1) its module is enabled, (2) if it has an entity,
   // the user has any permission on that entity. Uses smart key resolution so
   // 'user'/'users', 'project'/'projects' etc. all match regardless of backend convention.
+  // entityFallbacks provides OR-logic: item shows if user has access to entity OR any fallback.
   const visibleNavItems = useMemo(() => {
+    const hasAnyPermission = (entityName: string): boolean => {
+      if (!permissions?.entities) return false
+      const key = resolvePermissionEntityKey(entityName, permissions.entities)
+      const p = permissions.entities[key]
+      if (!p) return false
+      return p.create === true || p.read === true || p.update === true || p.delete === true || p.list === true
+    }
+
     return NAV_ITEMS.filter((item) => {
       if (!enabledModuleIds.includes(item.moduleId)) return false
       if (item.entity != null) {
         if (!permissions?.entities) return false
         const key = resolvePermissionEntityKey(item.entity, permissions.entities)
         const entityPerms = permissions.entities[key]
-        if (!entityPerms) return false
-        // If a specific action is required, check only that action
-        if (item.requiredAction) return entityPerms[item.requiredAction] === true
-        // Otherwise any permission is sufficient
-        return (
-          entityPerms.create === true ||
-          entityPerms.read === true ||
-          entityPerms.update === true ||
-          entityPerms.delete === true ||
-          entityPerms.list === true
-        )
+        if (entityPerms) {
+          // If a specific action is required, check only that action
+          if (item.requiredAction) return entityPerms[item.requiredAction] === true
+          if (
+            entityPerms.create === true ||
+            entityPerms.read === true ||
+            entityPerms.update === true ||
+            entityPerms.delete === true ||
+            entityPerms.list === true
+          ) return true
+        }
+        // Fall through to entityFallbacks check
+        if (item.entityFallbacks?.length) {
+          return item.entityFallbacks.some((fb) => hasAnyPermission(fb))
+        }
+        return false
       }
       return true
     })

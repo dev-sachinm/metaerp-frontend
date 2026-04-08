@@ -5,7 +5,7 @@ import { executeGraphQL } from '@/graphql/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader } from '@/components/Loader'
-import { ClipboardList, ExternalLink } from 'lucide-react'
+import { ClipboardList, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react'
 import { useUIPermission } from '@/hooks/usePermissions'
 
 // ── GraphQL ───────────────────────────────────────────────────────────────────
@@ -13,13 +13,15 @@ const AUDIT_WIDGET_QUERY = `
   query AuditWidget($page: Int, $pageSize: Int) {
     auditLogs(page: $page, pageSize: $pageSize) {
       items {
-        id timestamp userName action entityName entityLabel source
+        id timestamp userName action entityName entityLabel source changesJson
       }
       hasMore
       lastPage
     }
   }
 `
+
+type ChangeEntry = { oldValue: unknown; newValue: unknown }
 
 interface AuditWidgetLog {
   id: string
@@ -29,6 +31,7 @@ interface AuditWidgetLog {
   entityName: string
   entityLabel?: string | null
   source?: string | null
+  changesJson?: Record<string, ChangeEntry> | null
 }
 
 // ── Action badge colours ──────────────────────────────────────────────────────
@@ -51,6 +54,53 @@ function relativeTime(ts: string): string {
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs}h ago`
   return `${Math.floor(hrs / 24)}d ago`
+}
+
+// ── Changes diff expander ─────────────────────────────────────────────────────
+function fmt(v: unknown): string {
+  if (v === null || v === undefined) return '—'
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
+function ChangesBlock({ changes }: { changes: Record<string, ChangeEntry> }) {
+  const [open, setOpen] = useState(false)
+  const entries = Object.entries(changes)
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {entries.length} change{entries.length > 1 ? 's' : ''}
+      </button>
+      {open && (
+        <div className="mt-1 rounded border border-slate-100 overflow-hidden text-[10px]">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 text-slate-400 uppercase tracking-wide">
+                <th className="text-left px-2 py-1 font-medium w-1/3">Field</th>
+                <th className="text-left px-2 py-1 font-medium w-1/3">Old</th>
+                <th className="text-left px-2 py-1 font-medium w-1/3">New</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(([field, { oldValue, newValue }]) => (
+                <tr key={field} className="border-t border-slate-100">
+                  <td className="px-2 py-1 font-mono text-slate-500 whitespace-nowrap">{field}</td>
+                  <td className="px-2 py-1 text-red-500 line-through whitespace-pre-wrap break-all">{fmt(oldValue)}</td>
+                  <td className="px-2 py-1 text-green-600 font-medium whitespace-pre-wrap break-all">{fmt(newValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -156,6 +206,9 @@ export function AuditLogWidget() {
                     <span className="font-medium">{log.entityLabel ?? log.entityName}</span>
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5 capitalize">{log.entityName}</p>
+                  {log.changesJson && Object.keys(log.changesJson).length > 0 && (
+                    <ChangesBlock changes={log.changesJson} />
+                  )}
                 </div>
 
                 {/* Time & Source */}

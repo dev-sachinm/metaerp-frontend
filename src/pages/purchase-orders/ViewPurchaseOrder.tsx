@@ -1,20 +1,22 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit2, Download, FileText, Plus, Save, X, Upload } from 'lucide-react'
 import { usePurchaseOrder } from '@/hooks/graphql/usePurchaseOrderQueries'
 import { useUpdatePurchaseOrder } from '@/hooks/graphql/usePurchaseOrderMutations'
 import { useExpenseCategoriesList } from '@/hooks/graphql/useMasterDataQueries'
 import { useCanAccess } from '@/hooks/usePermissions'
+import { useCurrentUser } from '@/stores/authStore'
 import { Loader } from '@/components/Loader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format } from 'date-fns'
 import { executeGraphQL } from '@/graphql/client'
-import { EXPORT_PO_LINE_ITEMS_CSV, GET_PO_ATTACHMENT_UPLOAD_URL } from '@/graphql/queries/purchaseOrder.queries'
+import { EXPORT_PO_LINE_ITEMS_XLSX, GET_PO_ATTACHMENT_DOWNLOAD_URL } from '@/graphql/queries/purchaseOrder.queries'
 import { toast } from 'sonner'
 
 import { DashboardLayout } from '@/layouts/DashboardLayout'
+import { CostingDialog } from './CostingDialog'
 
 export function ViewPurchaseOrder() {
   const { id } = useParams()
@@ -24,81 +26,61 @@ export function ViewPurchaseOrder() {
   const { data: expenseCategoriesData } = useExpenseCategoriesList(1, 200)
   
   const po = data?.purchaseOrder
+  const currentUser = useCurrentUser()
+  const userRoles = currentUser?.roles ?? []
+  const isManufacturing = userRoles.some(r => r === 'Manufacturing')
+  const isProcurement = userRoles.some(r => r === 'Procurement')
   const canUpdate = useCanAccess('purchase_order', 'update')
   const canUpdateBom = useCanAccess('fixture_bom', 'update')
 
   const isMiscPo = po?.poType === 'Miscellaneous'
   const canEditLines = canUpdate && (isMiscPo || canUpdateBom)
+  const canCosting = canUpdate && isProcurement && !isMiscPo
 
   const [isEditingLines, setIsEditingLines] = useState(false)
   const [draftLines, setDraftLines] = useState<any[]>([])
-  
-  const [isExporting, setIsExporting] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [costingOpen, setCostingOpen] = useState(false)
 
-  const handleExportCsv = async () => {
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportXlsx = async () => {
     try {
       setIsExporting(true)
-      const data = await executeGraphQL<{ exportPurchaseOrderLineItemsCsv: string }>(EXPORT_PO_LINE_ITEMS_CSV, { id: po!.id })
-      const csvString = data.exportPurchaseOrderLineItemsCsv
-      if (!csvString) {
+      const data = await executeGraphQL<{ exportPurchaseOrderLineItemsXlsx: { s3Key: string; downloadUrl: string } }>(EXPORT_PO_LINE_ITEMS_XLSX, { id: po!.id })
+      const downloadUrl = data.exportPurchaseOrderLineItemsXlsx.downloadUrl
+      if (!downloadUrl) {
         toast.error('No data to export')
         return
       }
-      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `PO_${po!.poNumber}_LineItems.csv`)
+      link.href = downloadUrl
+      link.setAttribute('download', `PO_${po!.poNumber}_LineItems.xlsx`)
       link.style.visibility = 'hidden'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
     } catch (e) {
-      toast.error('Failed to export CSV')
+      toast.error('Failed to export Excel')
     } finally {
       setIsExporting(false)
     }
   }
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const handleDownloadAttachment = async (s3Key: string, fallbackFilename?: string | null) => {
     try {
-      setIsUploading(true)
-      const data = await executeGraphQL<{ getPurchaseOrderAttachmentUploadUrl: { uploadUrl: string, s3Key: string } }>(
-        GET_PO_ATTACHMENT_UPLOAD_URL, 
-        { poId: po!.id, filename: file.name }
+      const data = await executeGraphQL<{ getPurchaseOrderAttachmentDownloadUrl: { downloadUrl: string; filename: string } }>(
+        GET_PO_ATTACHMENT_DOWNLOAD_URL, { s3Key }
       )
-      const { uploadUrl, s3Key } = data.getPurchaseOrderAttachmentUploadUrl
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-        },
-      })
-
-      if (!uploadRes.ok) {
-        throw new Error('Failed to upload file to S3')
-      }
-
-      await updateMutation.mutateAsync({ attachmentsToAdd: [{ s3Key, filename: file.name }] })
-      toast.success('Attachment uploaded successfully')
-    } catch (err) {
-      toast.error('Failed to upload attachment')
-    } finally {
-      setIsUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
+      const { downloadUrl, filename } = data.getPurchaseOrderAttachmentDownloadUrl
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.setAttribute('download', filename || fallbackFilename || s3Key.split('/').pop() || 'attachment')
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch {
+      toast.error('Failed to get download link')
     }
   }
 
@@ -196,9 +178,14 @@ export function ViewPurchaseOrder() {
             <div className="flex items-center justify-between border-b pb-2">
               <h2 className="text-lg font-semibold text-slate-800">Line Items</h2>
               <div className="flex gap-2">
+                {canCosting && !isEditingLines && (
+                  <Button variant="outline" size="sm" onClick={() => setCostingOpen(true)}>
+                    <Upload className="h-3.5 w-3.5 mr-2" /> Costing
+                  </Button>
+                )}
                 {!isEditingLines && po.lineItems.length > 0 && (
-                  <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={isExporting}>
-                    <Download className="h-3.5 w-3.5 mr-2" /> {isExporting ? 'Exporting...' : 'Export CSV'}
+                  <Button variant="outline" size="sm" onClick={handleExportXlsx} disabled={isExporting}>
+                    <Download className="h-3.5 w-3.5 mr-2" /> {isExporting ? 'Exporting...' : 'Export Excel'}
                   </Button>
                 )}
                 {canEditLines && !isEditingLines && (
@@ -228,7 +215,7 @@ export function ViewPurchaseOrder() {
                     </th>
                     {!isMiscPo && <th className="px-3 py-2 text-center">Qty</th>}
                     {!isMiscPo && <th className="px-3 py-2 text-center">Received</th>}
-                    {!isMiscPo && <th className="px-3 py-2 text-right">Unit Price</th>}
+                    {!isMiscPo && !isManufacturing && <th className="px-3 py-2 text-right">Unit Price</th>}
                     {!isMiscPo && <th className="px-3 py-2 text-center">Status</th>}
                     {isMiscPo && <th className="px-3 py-2 text-right">Expense Category</th>}
                     {isMiscPo && <th className="px-3 py-2 text-right">Misc Cost</th>}
@@ -249,7 +236,7 @@ export function ViewPurchaseOrder() {
                           </td>
                           {!isMiscPo && <td className="px-3 py-2 text-center font-medium">{item.quantity ?? '—'}</td>}
                           {!isMiscPo && <td className="px-3 py-2 text-center font-medium">{item.receivedQuantity ?? '—'}</td>}
-                          {!isMiscPo && <td className="px-3 py-2 text-right font-mono">{item.purchaseUnitPrice != null ? item.purchaseUnitPrice.toFixed(2) : '—'}</td>}
+                          {!isMiscPo && !isManufacturing && <td className="px-3 py-2 text-right font-mono">{item.purchaseUnitPrice != null ? item.purchaseUnitPrice.toFixed(2) : '—'}</td>}
                           {!isMiscPo && <td className="px-3 py-2 text-center">
                             {item.status ? (
                               <Badge variant="secondary" className="text-[10px] font-mono">{item.status}</Badge>
@@ -265,7 +252,7 @@ export function ViewPurchaseOrder() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={isMiscPo ? 3 : 5} className="px-3 py-4 text-center text-slate-500">No line items.</td>
+                        <td colSpan={isMiscPo ? 3 : isManufacturing ? 4 : 5} className="px-3 py-4 text-center text-slate-500">No line items.</td>
                       </tr>
                     )
                   ) : (
@@ -291,7 +278,7 @@ export function ViewPurchaseOrder() {
                           {!isMiscPo && <td className="px-1 py-2 text-center text-slate-500 text-sm">
                             {item.receivedQuantity ?? '—'}
                           </td>}
-                          {!isMiscPo && <td className="px-1 py-2">
+                          {!isMiscPo && !isManufacturing && <td className="px-1 py-2">
                             <Input 
                               className="h-8 text-sm w-24 text-right ml-auto" 
                               type="number" step="any" min={0}
@@ -374,8 +361,8 @@ export function ViewPurchaseOrder() {
                 </div>
               )}
               <div className="grid grid-cols-2">
-                <span className="text-slate-500">Project ID</span>
-                <span className="font-medium text-slate-900">{po.projectId || '—'}</span>
+                <span className="text-slate-500">Project Name</span>
+                <span className="font-medium text-slate-900">{po.projectName ?? po.projectId ?? '—'}</span>
               </div>
               <div className="grid grid-cols-2">
                 <span className="text-slate-500">Created At</span>
@@ -385,68 +372,74 @@ export function ViewPurchaseOrder() {
                 <span className="text-slate-500">Created By</span>
                 <span className="font-medium text-slate-900">{po.createdByUsername || '—'}</span>
               </div>
+              <div className="grid grid-cols-2">
+                <span className="text-slate-500">Costing Date</span>
+                <span className="font-medium text-slate-900">{po.costingUpdatedDate ? format(new Date(po.costingUpdatedDate), 'dd MMM yyyy HH:mm') : '—'}</span>
+              </div>
+              <div className="grid grid-cols-2">
+                <span className="text-slate-500">Completed Date</span>
+                <span className="font-medium text-slate-900">{po.completedDate ? format(new Date(po.completedDate), 'dd MMM yyyy HH:mm') : '—'}</span>
+              </div>
             </div>
             
-            {po.details && (
-              <div className="pt-3 border-t">
-                <span className="block text-xs font-semibold text-slate-500 mb-1">Details & Notes</span>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap">{po.details}</p>
-              </div>
-            )}
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+          {!isManufacturing && po.lineItemsSummary && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-slate-800 border-b pb-2 mb-4">Summary</h2>
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2">
+                  <span className="text-slate-500">Item Count</span>
+                  <span className="font-medium text-slate-900">{po.lineItemsSummary.itemCount}</span>
+                </div>
+                <div className="grid grid-cols-2">
+                  <span className="text-slate-500">Total Cost</span>
+                  <span className="font-mono font-semibold text-slate-900">{po.lineItemsSummary.totalCost != null ? po.lineItemsSummary.totalCost.toFixed(2) : '—'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isManufacturing && <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-2">
               <h2 className="text-lg font-semibold text-slate-800">Attachments</h2>
-              {canUpdate && (
-                <div>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    onChange={handleFileChange}
-                    accept=".xlsx,.xls,.csv,.pdf,.doc,.docx,.png,.jpg,.jpeg"
-                  />
-                  <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isUploading}>
-                    <Upload className="h-3.5 w-3.5 mr-2" /> {isUploading ? 'Uploading...' : 'Upload'}
-                  </Button>
-                </div>
-              )}
             </div>
-            {po.attachments ? (
+            {po.parsedAttachments && po.parsedAttachments.length > 0 ? (
               <div className="space-y-2">
-                {(() => {
-                  let parsedAttachments: string[] = []
-                  try {
-                    parsedAttachments = JSON.parse(po.attachments)
-                    if (!Array.isArray(parsedAttachments)) parsedAttachments = [po.attachments]
-                  } catch {
-                    parsedAttachments = [po.attachments]
-                  }
-
-                  return parsedAttachments.map((att: any, idx: number) => {
-                    const attString = typeof att === 'string' ? att : (att?.s3Key || String(att))
-                    return (
-                      <div key={idx} className="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
-                        <span className="text-sm font-medium text-slate-700 truncate">{att.filename || attString.split('/').pop() || attString}</span>
+                {po.parsedAttachments.map((att, idx) => (
+                  <div key={att.id ?? idx} className="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50">
+                    <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                      <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-slate-700 truncate block">{att.filename || att.name || att.s3Key.split('/').pop()}</span>
+                        {att.uploadedAt && (
+                          <span className="text-xs text-slate-400">{format(new Date(att.uploadedAt), 'dd MMM yyyy HH:mm')}</span>
+                        )}
                       </div>
-                      <a href={`/api/download/${encodeURIComponent(att.s3Key || attString)}`} target="_blank" rel="noreferrer" className="p-1 hover:bg-slate-200 rounded shrink-0">
-                          <Download className="h-4 w-4 text-slate-600" />
-                        </a>
-                      </div>
-                    )
-                  })
-                })()}
+                    </div>
+                    <button
+                      onClick={() => handleDownloadAttachment(att.s3Key, att.filename ?? att.name)}
+                      className="p-1 hover:bg-slate-200 rounded shrink-0 ml-2"
+                    >
+                      <Download className="h-4 w-4 text-slate-600" />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-500 text-center py-4">No attachments</p>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </div>
+    {po && (
+      <CostingDialog
+        open={costingOpen}
+        onOpenChange={setCostingOpen}
+        poId={po.id}
+      />
+    )}
     </DashboardLayout>
   )
 }
