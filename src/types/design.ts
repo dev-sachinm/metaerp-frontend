@@ -68,6 +68,9 @@ export interface ManufacturedPart {
   inprogressAt?: string | null
   qualityCheckedAt?: string | null
   receivedAt?: string | null
+  collectedByassemblyQuantity?: number | null
+  collectedByUserId?: string | null
+  collectedAt?: string | null
 }
 
 export interface StandardPart {
@@ -90,6 +93,9 @@ export interface StandardPart {
   fixtureSeq?: number | null
   unitSeq?: number | null
   partSeq?: number | null
+  collectedByassemblyQuantity?: number | null
+  collectedByUserId?: string | null
+  collectedAt?: string | null
 }
 
 export interface BomViewFixture {
@@ -169,10 +175,25 @@ export interface WrongEntry {
   reason: string
 }
 
+export interface BomParseError {
+  rowNum: number
+  rawValue?: string | null
+  reason: string
+}
+
+export interface BomParseWarning {
+  drawingNo: string
+  description?: string | null
+  qty?: number | null
+  note: string
+}
+
 export interface ParseBomSummary {
   totalManufactured: number
   totalStandard: number
   wrongEntryCount: number
+  errorCount?: number
+  warningCount?: number
   duplicateDrawingCount?: number
   newFixtureSeqs?: number[]
   existingFixtureSeqs?: number[]
@@ -188,6 +209,8 @@ export interface ParsedBom {
   manufacturedParts: ParsedManufacturedPart[]
   standardParts: ParsedStandardPart[]
   wrongEntries: WrongEntry[]
+  errors?: BomParseError[]
+  warnings?: BomParseWarning[]
 }
 
 // ── Upload wizard resolution types ────────────────────────────────────────────

@@ -161,7 +161,7 @@ function LogRow({ log }: { log: AuditLog }) {
         </TableCell>
         <TableCell className="text-xs font-mono text-slate-600">{log.entityName}</TableCell>
         <TableCell className="text-xs text-slate-600 max-w-[200px] truncate" title={log.entityLabel ?? log.entityId}>
-          {log.entityLabel ?? <span className="font-mono text-slate-400">{log.entityId.slice(0, 8)}…</span>}
+          {log.entityLabel ?? (log.entityId ? <span className="font-mono text-slate-400">{log.entityId.slice(0, 8)}…</span> : '—')}
         </TableCell>
         <TableCell className="text-xs text-slate-400">{Object.keys(log.changesJson ?? {}).length || '—'}</TableCell>
         <TableCell className="text-xs text-slate-500">{log.source ?? '—'}</TableCell>
@@ -245,7 +245,7 @@ export function AuditLogsList() {
 
   const permissionDenied = isError && isPermissionError(error)
 
-  const PaginationBar = ({ border }: { border: 'bottom' | 'top' }) => totalPages <= 1 ? null : (
+  const PaginationBar = ({ border }: { border: 'bottom' | 'top' }) => (
     <div className={`flex flex-wrap items-center justify-between gap-3 py-2 ${border === 'bottom' ? 'border-t mt-2' : 'border-b mb-1'} border-slate-200`}>
       <div className="flex items-center gap-3 text-sm text-slate-600">
         <span className="text-xs">{from}–{to} of {total}</span>

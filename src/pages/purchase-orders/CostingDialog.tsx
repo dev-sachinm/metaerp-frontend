@@ -10,23 +10,25 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useParseCostingExcel, useConfirmCosting, type CostingPreview } from '@/hooks/graphql/useCostingMutations'
+import { getErrorMessage } from '@/lib/graphqlErrors'
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   poId: string
+  fixtureId?: string
 }
 
 type Step = 'upload' | 'preview'
 
-export function CostingDialog({ open, onOpenChange, poId }: Props) {
+export function CostingDialog({ open, onOpenChange, poId, fixtureId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<Step>('upload')
   const [preview, setPreview] = useState<CostingPreview | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
   const parseMutation = useParseCostingExcel()
-  const confirmMutation = useConfirmCosting(poId)
+  const confirmMutation = useConfirmCosting(poId, fixtureId)
 
   const reset = () => {
     setStep('upload')
@@ -79,6 +81,7 @@ export function CostingDialog({ open, onOpenChange, poId }: Props) {
 
   const unmatchedCount = preview?.unmatchedDrawingNumbers.length ?? 0
   const matchedCount = (preview?.rows.length ?? 0) - unmatchedCount
+  const hasMismatch = preview?.rows.some((r) => r.quantityMismatch) ?? false
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -118,9 +121,11 @@ export function CostingDialog({ open, onOpenChange, poId }: Props) {
             />
 
             {parseMutation.isError && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                Failed to parse file. Please check the format and try again.
+              <div className="flex gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+                  {getErrorMessage(parseMutation.error, 'Failed to parse file. Please check the format and try again.')}
+                </pre>
               </div>
             )}
           </div>
@@ -139,6 +144,12 @@ export function CostingDialog({ open, onOpenChange, poId }: Props) {
                   {unmatchedCount} unmatched — will be skipped
                 </div>
               )}
+              {hasMismatch && (
+                <div className="flex items-center gap-1.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                  <AlertTriangle className="h-4 w-4" />
+                  Quantity mismatch — fix before confirming
+                </div>
+              )}
             </div>
 
             {unmatchedCount > 0 && (
@@ -153,33 +164,60 @@ export function CostingDialog({ open, onOpenChange, poId }: Props) {
                   <tr>
                     <th className="px-3 py-2">Drawing Number</th>
                     <th className="px-3 py-2 text-right">Unit Price</th>
-                    <th className="px-3 py-2 text-right">Qty</th>
+                    <th className="px-3 py-2 text-right">Qty LH</th>
+                    <th className="px-3 py-2 text-right">Qty RH</th>
                     <th className="px-3 py-2 text-right">Total Cost</th>
                     <th className="px-3 py-2 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {preview.rows.map((row, i) => (
-                    <tr key={i} className={row.matched ? 'hover:bg-slate-50' : 'bg-amber-50 hover:bg-amber-100'}>
-                      <td className="px-3 py-2 font-mono text-indigo-600 font-medium">{row.drawingNumber}</td>
+                    <tr
+                      key={i}
+                      className={
+                        row.quantityMismatch
+                          ? 'bg-red-50 hover:bg-red-100'
+                          : row.matched
+                          ? 'hover:bg-slate-50'
+                          : 'bg-amber-50 hover:bg-amber-100'
+                      }
+                    >
+                      <td className="px-3 py-2 font-mono text-indigo-600 font-medium">
+                        {row.drawingNumber}
+                      </td>
                       <td className="px-3 py-2 text-right font-mono">
                         {row.purchaseUnitPrice != null ? Number(row.purchaseUnitPrice).toFixed(2) : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right">{row.quantity ?? '—'}</td>
+                      <td className="px-3 py-2 text-right">{row.qtyLh ?? '—'}</td>
+                      <td className="px-3 py-2 text-right">{row.qtyRh ?? '—'}</td>
                       <td className="px-3 py-2 text-right font-mono">
                         {row.totalCost != null ? Number(row.totalCost).toFixed(2) : '—'}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.matched
-                          ? <Badge variant="secondary" className="text-[10px] text-emerald-700 bg-emerald-50 border-emerald-200">matched</Badge>
-                          : <Badge variant="secondary" className="text-[10px] text-amber-700 bg-amber-50 border-amber-200">unmatched</Badge>
-                        }
+                        {row.quantityMismatch ? (
+                          <Badge variant="secondary" className="text-[10px] text-red-700 bg-red-50 border-red-200 gap-1">
+                            <AlertTriangle className="h-3 w-3" /> qty mismatch
+                          </Badge>
+                        ) : row.matched ? (
+                          <Badge variant="secondary" className="text-[10px] text-emerald-700 bg-emerald-50 border-emerald-200">matched</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] text-amber-700 bg-amber-50 border-amber-200">unmatched</Badge>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {confirmMutation.isError && (
+              <div className="flex gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+                  {getErrorMessage(confirmMutation.error, 'Failed to confirm costing')}
+                </pre>
+              </div>
+            )}
           </div>
         )}
 
@@ -197,7 +235,7 @@ export function CostingDialog({ open, onOpenChange, poId }: Props) {
               size="sm"
               className="bg-indigo-600 hover:bg-indigo-700"
               onClick={handleConfirm}
-              disabled={confirmMutation.isPending || matchedCount === 0}
+              disabled={confirmMutation.isPending || matchedCount === 0 || hasMismatch}
             >
               {confirmMutation.isPending ? 'Applying…' : `Confirm & Apply (${matchedCount})`}
             </Button>

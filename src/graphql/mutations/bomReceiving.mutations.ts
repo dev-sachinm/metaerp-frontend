@@ -30,6 +30,21 @@ export const UPDATE_MANUFACTURED_QTY = `
   }
 `
 
+export const MARK_BOM_PARTS_RECEIVED = `
+  mutation MarkBomPartsReceived($items: [BomReceiveItemInput!]!) {
+    markBomPartsReceived(items: $items)
+  }
+`
+
+export const COLLECT_BY_ASSEMBLY = `
+  mutation CollectByAssembly($collectedByUserId: String!, $items: [CollectByAssemblyItemInput!]!) {
+    collectByAssembly(collectedByUserId: $collectedByUserId, items: $items) {
+      s3Key
+      downloadUrl
+    }
+  }
+`
+
 export const UPDATE_STANDARD_PART_PURCHASE_UNIT_PRICE = `
   mutation UpdateStandardPartPurchaseUnitPrice($standardPartId: String!, $purchaseUnitPrice: Float) {
     updateStandardPartPurchaseUnitPrice(standardPartId: $standardPartId, purchaseUnitPrice: $purchaseUnitPrice) {

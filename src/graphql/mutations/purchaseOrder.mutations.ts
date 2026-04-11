@@ -13,8 +13,8 @@ export const CREATE_MANUFACTURED_PO = `
 `
 
 export const CREATE_STANDARD_PO = `
-  mutation CreateStandardPo($fixtureId: String!, $partIds: [String!]!, $supplierId: String!) {
-    createStandardPo(fixtureId: $fixtureId, partIds: $partIds, supplierId: $supplierId) {
+  mutation CreateStandardPo($fixtureId: String!, $parts: [StandardPoPartInput!]!, $supplierId: String!) {
+    createStandardPo(fixtureId: $fixtureId, parts: $parts, supplierId: $supplierId) {
       id
       poNumber
       title

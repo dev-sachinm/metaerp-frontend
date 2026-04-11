@@ -42,6 +42,7 @@ export const GET_BOM_VIEW = `
         vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
         pendingAt inprogressAt qualityCheckedAt receivedAt
+        collectedByassemblyQuantity collectedByUserId collectedAt
       }
       standardParts {
         id fixtureId productId unitId supplierId supplierName
@@ -52,6 +53,7 @@ export const GET_BOM_VIEW = `
         purchaseQty
         purchaseUnitPrice
         fixtureSeq unitSeq partSeq
+        collectedByassemblyQuantity collectedByUserId collectedAt
       }
     }
   }
@@ -86,6 +88,8 @@ export const PARSE_PROJECT_BOM_FILE = `
         totalManufactured
         totalStandard
         wrongEntryCount
+        errorCount
+        warningCount
         duplicateDrawingCount
         newFixtureSeqs
         existingFixtureSeqs
@@ -124,6 +128,8 @@ export const PARSE_PROJECT_BOM_FILE = `
         unitSeq
       }
       wrongEntries { rowNum rawValue reason }
+      errors { rowNum rawValue reason }
+      warnings { drawingNo description qty note }
     }
   }
 `
@@ -135,6 +141,8 @@ export const PARSE_BOM_FILE = `
         totalManufactured
         totalStandard
         wrongEntryCount
+        errorCount
+        warningCount
         duplicateDrawingCount
       }
       manufacturedParts {
@@ -166,6 +174,8 @@ export const PARSE_BOM_FILE = `
         unitSeq
       }
       wrongEntries { rowNum rawValue reason }
+      errors { rowNum rawValue reason }
+      warnings { drawingNo description qty note }
     }
   }
 `

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,12 +36,16 @@ import { fetchDrawingViewUrl } from '@/hooks/graphql/useDesign'
 import { useSuppliers, useVendors } from '@/hooks/graphql/useMasterDataQueries'
 import { useCurrentUser } from '@/stores/authStore'
 import { useCreateManufacturedPo, useCreateStandardPo } from '@/hooks/graphql/usePurchaseOrderMutations'
+import { usePurchaseOrdersByFixture, useStandardPartsForPo } from '@/hooks/graphql/usePurchaseOrderQueries'
 import {
   useUpdateManufacturedQty,
   useUpdateManufacturedReceivedQty,
   useUpdateManufacturedStatusBulk,
   useUpdateStandardPartPurchaseUnitPrice,
+  useAssemblyUsers,
 } from '@/hooks/graphql/useBomReceivingMutations'
+import { MarkAsReceivedDialog } from './MarkAsReceivedDialog'
+import { CollectByAssemblyDialog } from './CollectByAssemblyDialog'
 import { useUIPermission, useCanAccess } from '@/hooks/usePermissions'
 import { formatManufacturedStatus, MANUFACTURED_PART_STATUS_OPTIONS } from '@/lib/bomManufacturedStatuses'
 import type { ManufacturedPart, StandardPart, FixtureSummary } from '@/types/design'
@@ -180,6 +185,7 @@ type ManufacturedPartRowProps = {
     saving: boolean
   }
   showReceiveQty?: boolean
+  assemblyUserName?: string | null
 }
 
 function ManufacturedPartRow({
@@ -188,6 +194,7 @@ function ManufacturedPartRow({
   storeReceiving,
   qtyEditing,
   showReceiveQty,
+  assemblyUserName,
 }: ManufacturedPartRowProps) {
   return (
     <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
@@ -269,6 +276,12 @@ function ManufacturedPartRow({
       <td className="py-1.5 px-2 text-xs text-green-600 whitespace-nowrap">
         {fmtStatusDate(part.receivedAt) ?? <span className="text-slate-300">—</span>}
       </td>
+      <td className="py-1.5 px-2 text-xs text-center font-mono text-indigo-700">
+        {part.collectedByassemblyQuantity != null ? part.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+      </td>
+      <td className="py-1.5 px-2 text-xs text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={assemblyUserName ?? ''}>
+        {assemblyUserName || <span className="text-slate-300">—</span>}
+      </td>
       {showReceiveQty && (
         <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-mono">
           {storeReceiving?.editing ? (
@@ -341,11 +354,13 @@ function UnitSection({
   onToggleStdPart,
   onSelectAllStd,
   onClearStd,
-  storeMode,
+  showReceiveQtyCol,
+  showPriceEditCol,
   priceDraftByLine,
   onPriceDraftChange,
   onSavePrice,
   savingPriceId,
+  assemblyUserById,
 }: {
   unitSeq: number
   mfgParts: ManufacturedPart[]
@@ -364,11 +379,13 @@ function UnitSection({
   onToggleStdPart?: (id: string) => void
   onSelectAllStd?: () => void
   onClearStd?: () => void
-  storeMode?: boolean
+  showReceiveQtyCol?: boolean
+  showPriceEditCol?: boolean
   priceDraftByLine?: Record<string, string>
   onPriceDraftChange?: (lineId: string, value: string) => void
   onSavePrice?: (lineId: string) => void
   savingPriceId?: string | null
+  assemblyUserById?: Record<string, string>
 }) {
   const [open, setOpen] = useState(true)
   const totalParts = mfgParts.length + stdParts.length
@@ -426,7 +443,9 @@ function UnitSection({
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">In Progress Date</th>
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">QC Date</th>
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Received Date</th>
-                    {storeMode && (
+                    <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Collected Qty</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Assembly User</th>
+                    {showReceiveQtyCol && (
                       <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Receive Qty</th>
                     )}
                     <th className="py-1 px-2 text-right text-xs font-medium text-slate-400">Drawing</th>
@@ -448,7 +467,12 @@ function UnitSection({
                       }
                       storeReceiving={storeReceivingForPart?.(p)}
                       qtyEditing={qtyEditingForPart?.(p)}
-                      showReceiveQty={storeMode}
+                      showReceiveQty={showReceiveQtyCol}
+                      assemblyUserName={
+                        p.collectedByUserId
+                          ? (assemblyUserById?.[p.collectedByUserId] ?? p.collectedByUserId)
+                          : null
+                      }
                     />
                   ))}
                 </tbody>
@@ -488,7 +512,9 @@ function UnitSection({
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Exp Qty</th>
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">In Stock</th>
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">To Purchase</th>
-                    {storeMode && (
+                    <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Collected Qty</th>
+                    <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Assembly User</th>
+                    {showPriceEditCol && (
                       <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Unit price</th>
                     )}
                   </tr>
@@ -497,6 +523,9 @@ function UnitSection({
                   {stdParts.map((p) => {
                     const purchaseQty = p.purchaseQty ?? 0
                     const needsPurchase = purchaseQty > 0
+                    const stdAssemblyUser = p.collectedByUserId
+                      ? (assemblyUserById?.[p.collectedByUserId] ?? p.collectedByUserId)
+                      : null
                     return (
                       <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-teal-50/40 transition-colors">
                         {poMode && (
@@ -536,7 +565,13 @@ function UnitSection({
                             {purchaseQty}
                           </span>
                         </td>
-                        {storeMode && (
+                        <td className="py-1.5 px-2 text-xs text-center font-mono text-indigo-700">
+                          {p.collectedByassemblyQuantity != null ? p.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="py-1.5 px-2 text-xs text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={stdAssemblyUser ?? ''}>
+                          {stdAssemblyUser || <span className="text-slate-300">—</span>}
+                        </td>
+                        {showPriceEditCol && (
                           <td className="py-1.5 px-2 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <Input
@@ -725,7 +760,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const createMfgPo = useCreateManufacturedPo(fixture.id)
   const createStdPo = useCreateStandardPo(fixture.id)
   const bulkMfgStatus = useUpdateManufacturedStatusBulk(fixture.id)
-  const updateRecvQty = useUpdateManufacturedReceivedQty(fixture.id)
+
   const updateMfgQty = useUpdateManufacturedQty(fixture.id)
   const updateStdPrice = useUpdateStandardPartPurchaseUnitPrice(fixture.id)
 
@@ -750,18 +785,17 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     // If the user has a mix of roles, we combine their capabilities
     const hasAnyRole = isStore || isPurchase || isManufacturing || isQualityCheck || isDesigner
 
-    const showMfgCheckbox = isManufacturing || isPurchase || isQualityCheck || isStore
+    const showMfgCheckbox = isManufacturing || isQualityCheck || isStore
 
     const caps = {
       canCreateVendorPo: isManufacturing,
       canCreateSupplierPo: isPurchase,
-      canEditStdPrice: isPurchase,
+      canEditStdPrice: false,
       canMarkQualityChecked: isQualityCheck,
       canMarkReceived: isStore,
       canUpdateStdQty: isStore,
       canEditMfgQty: isDesigner,
-      showMfgParts: true, // Everyone can see mfg parts by default
-      // Mfg and QC don't see standard parts unless they also have other roles
+      showMfgParts: !isPurchase,
       showStdParts: isDesigner || isPurchase || isStore || !hasAnyRole,
       // QC only sees inprogress and quality_checked mfg parts, unless they also have other roles requiring full visibility
       mfgStatusFilter: null, // Removed filter to allow Quality to see all mfg parts
@@ -772,7 +806,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     const selectable = new Set<string>()
     if (isManufacturing) selectable.add('pending')
     if (isQualityCheck) selectable.add('inprogress')
-    if (isStore) selectable.add('quality_checked')
+    if (isStore) { selectable.add('quality_checked'); selectable.add('received') }
     
     caps.mfgSelectableStatuses = caps.showMfgCheckbox ? Array.from(selectable) : null;
 
@@ -786,14 +820,39 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const [supplierId, setSupplierId] = useState('')
   const [mfgDlgOpen, setMfgDlgOpen] = useState(false)
   const [stdDlgOpen, setStdDlgOpen] = useState(false)
+  const { data: stdPartsData, isLoading: stdPartsLoading, refetch: refetchStdParts } = useStandardPartsForPo(
+    fixture.id,
+    stdDlgOpen,
+  )
+  // Scope existing-POs query to the checked parts only (all of them, regardless of orderQty)
+  const selectedPartIdsForPo = useMemo(
+    () => (stdDlgOpen ? [...selStd] : undefined),
+    [stdDlgOpen, selStd],
+  )
+  const { data: existingPosData, isLoading: existingPosLoading } = usePurchaseOrdersByFixture(
+    fixture.id,
+    'StandardPart',
+    stdDlgOpen,
+    selectedPartIdsForPo,
+  )
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkDlgOpen, setBulkDlgOpen] = useState(false)
-  const [recvEditId, setRecvEditId] = useState<string | null>(null)
-  const [recvDraftQty, setRecvDraftQty] = useState('')
   const [qtyEditId, setQtyEditId] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
   const [priceDraftByLine, setPriceDraftByLine] = useState<Record<string, string>>({})
   const [savingPriceLineId, setSavingPriceLineId] = useState<string | null>(null)
+  const [markReceivedOpen, setMarkReceivedOpen] = useState(false)
+  const [collectAssemblyOpen, setCollectAssemblyOpen] = useState(false)
+
+  const { data: assemblyUsersData } = useAssemblyUsers(capabilities.canMarkReceived)
+
+  const assemblyUserById = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const u of assemblyUsersData?.users.items ?? []) {
+      map[u.id] = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.id
+    }
+    return map
+  }, [assemblyUsersData])
 
   const [filterDraft, setFilterDraft] = useState<BomViewFilters>({})
   const [filters, setFilters] = useState<BomViewFilters>({})
@@ -852,6 +911,8 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const { data, isLoading, isError, error } = useBomView(expanded ? fixture.id : null, filters, expanded)
   const bomView = data?.bomView
 
+  const hasAnySelected = selMfg.size > 0 || selStd.size > 0
+
   const mfgPartIds = useMemo(
     () => bomView?.manufacturedParts.map((p) => p.id) ?? [],
     [bomView],
@@ -868,8 +929,6 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     setVendorId('')
     setSupplierId('')
     setBulkStatus('')
-    setRecvEditId(null)
-    setRecvDraftQty('')
     setQtyEditId(null)
     setQtyDraft('')
     setPriceDraftByLine({})
@@ -921,24 +980,28 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
   const handleConfirmStd = async () => {
     if (!supplierId || selStd.size === 0) return
-    await createStdPo.mutateAsync({ partIds: [...selStd], supplierId })
+    const freshResult = await refetchStdParts()
+    const allFreshParts = freshResult.data?.standardPartsForPo ?? []
+    // Only consider the user-selected parts
+    const selectedFresh = allFreshParts.filter(p => selStd.has(p.id))
+    const prevParts = (stdPartsData?.standardPartsForPo ?? []).filter(p => selStd.has(p.id))
+    const hasChanged = selectedFresh.some(fp => {
+      const prev = prevParts.find(p => p.id === fp.id)
+      return prev && prev.orderQty !== fp.orderQty
+    })
+    if (hasChanged) {
+      toast.info('Quantities updated due to recent changes')
+    }
+    const validParts = selectedFresh.filter(p => p.orderQty > 0)
+    if (validParts.length === 0) {
+      toast.info('All items are already fully ordered or in stock')
+      return
+    }
+    const parts = validParts.map(p => ({ partId: p.id, orderedQty: p.orderQty }))
+    await createStdPo.mutateAsync({ parts, supplierId })
     setStdDlgOpen(false)
-    clearStd()
   }
 
-  const beginRecvEdit = (part: ManufacturedPart) => {
-    setRecvEditId(part.id)
-    setRecvDraftQty(part.receivedQuantity != null ? String(part.receivedQuantity) : '')
-  }
-
-  const saveRecvEdit = async () => {
-    if (!recvEditId) return
-    const raw = recvDraftQty.trim()
-    const qty = raw === '' ? null : parseFloat(raw)
-    if (qty != null && Number.isNaN(qty)) return
-    await updateRecvQty.mutateAsync({ partId: recvEditId, receivedQty: qty })
-    setRecvEditId(null)
-  }
 
   const beginQtyEdit = (part: ManufacturedPart) => {
     setQtyEditId(part.id)
@@ -969,20 +1032,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     }
   }
 
-  const storeReceivingForPart = (part: ManufacturedPart): ManufacturedPartRowProps['storeReceiving'] => {
-    if (!capabilities.canMarkReceived) return undefined
-    const editing = recvEditId === part.id
-    return {
-      enabled: true,
-      editing,
-      draftQty: recvDraftQty,
-      onDraftQty: setRecvDraftQty,
-      onBeginEdit: () => beginRecvEdit(part),
-      onSave: () => void saveRecvEdit(),
-      onCancel: () => setRecvEditId(null),
-      saving: updateRecvQty.isPending,
-    }
-  }
+  const storeReceivingForPart = (_part: ManufacturedPart): ManufacturedPartRowProps['storeReceiving'] => undefined
 
   const handleConfirmBulkStatus = async () => {
     if (!bulkStatus || selMfgStatus.size === 0) return
@@ -1252,7 +1302,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                           {capabilities.canCreateVendorPo && (
                             <div className="flex flex-wrap items-end gap-2">
                               <Button type="button" size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 gap-1.5" disabled={selMfg.size === 0} onClick={(e) => { e.stopPropagation(); setMfgDlgOpen(true) }}>
-                                Send PO to Vendor
+                                Create Draft PO
                                 {selMfg.size > 0 && (
                                   <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1">
                                     {selMfg.size}
@@ -1276,14 +1326,29 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                           )}
 
                           {capabilities.canMarkReceived && (
-                            <div className="flex justify-end pt-1">
-                              <Button type="button" size="sm" className="bg-teal-700 hover:bg-teal-800 h-8" disabled={selMfg.size === 0} onClick={(e) => { 
-                                e.stopPropagation();
-                                setBulkStatus('received');
-                                setSelMfgStatus(new Set(selMfg));
-                                setBulkDlgOpen(true);
-                              }}>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="bg-teal-700 hover:bg-teal-800 h-8"
+                                disabled={!hasAnySelected}
+                                onClick={(e) => { e.stopPropagation(); setMarkReceivedOpen(true) }}
+                              >
                                 Mark as Received
+                                {hasAnySelected && (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 ml-1.5">
+                                    {selMfg.size + selStd.size}
+                                  </span>
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="bg-indigo-600 hover:bg-indigo-700 h-8"
+                                disabled={!hasAnySelected}
+                                onClick={(e) => { e.stopPropagation(); setCollectAssemblyOpen(true) }}
+                              >
+                                Collected by Assembly
                               </Button>
                             </div>
                           )}
@@ -1321,7 +1386,9 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                                 selectedIds: selMfg, 
                                 onToggle: toggleMfgPo,
                                 onSelectAll: () => {
-                                  const selectable = parts.mfg.filter(p => capabilities.mfgSelectableStatuses ? capabilities.mfgSelectableStatuses.includes(p.status ?? '') : true)
+                                  const selectable = parts.mfg.filter(p =>
+                                    capabilities.mfgSelectableStatuses ? capabilities.mfgSelectableStatuses.includes(p.status ?? '') : true
+                                  )
                                   setSelMfg(new Set([...selMfg, ...selectable.map(p => p.id)]))
                                 },
                                 onClear: () => setSelMfg(new Set([...selMfg].filter(id => !parts.mfg.some(p => p.id === id)))),
@@ -1338,11 +1405,13 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                         onToggleStdPart={toggleStd}
                         onSelectAllStd={() => setSelStd(new Set([...selStd, ...parts.std.filter(p => (p.purchaseQty ?? 0) > 0).map(p => p.id)]))}
                         onClearStd={() => setSelStd(new Set([...selStd].filter(id => !parts.std.some(p => p.id === id))))}
-                        storeMode={capabilities.canUpdateStdQty || capabilities.canEditStdPrice}
+                        showReceiveQtyCol={capabilities.canUpdateStdQty}
+                        showPriceEditCol={capabilities.canEditStdPrice}
                         priceDraftByLine={priceDraftByLine}
                         onPriceDraftChange={(lineId, value) => setPriceDraftByLine((prev) => ({ ...prev, [lineId]: value }))}
                         onSavePrice={(lineId) => void handleSaveLinePrice(lineId)}
                         savingPriceId={savingPriceLineId}
+                        assemblyUserById={assemblyUserById}
                       />
                     ))}
                   </div>
@@ -1360,7 +1429,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
         <Dialog open={mfgDlgOpen} onOpenChange={setMfgDlgOpen}>
           <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Send PO to Vendor</DialogTitle>
+              <DialogTitle>Create Draft PO</DialogTitle>
               <DialogDescription>
                 Review the selected drawings, choose a vendor, then click <strong>Create PO</strong> to generate the purchase order.
               </DialogDescription>
@@ -1437,46 +1506,144 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
       {stdDlgOpen && (
         <Dialog open={stdDlgOpen} onOpenChange={setStdDlgOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Supplier PO</DialogTitle>
               <DialogDescription>
-                Select a supplier to create a purchase order for the selected standard parts.
+                Review standard parts for this fixture. Quantities are auto-calculated. Select a supplier and click "Create PO".
               </DialogDescription>
             </DialogHeader>
+
+            {/* Supplier picker */}
             <div className="py-2">
-              <Label className="text-xs mb-1 block">Supplier</Label>
-              <select 
-                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-                value={supplierId} 
+              <Label className="text-xs mb-1 block">Supplier <span className="text-red-500">*</span></Label>
+              <select
+                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={supplierId}
                 onChange={(e) => setSupplierId(e.target.value)}
               >
                 <option value="">Select supplier…</option>
                 {suppliersData?.suppliers.items.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
               </select>
             </div>
-            <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-md mt-2">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="py-1 px-2 text-left font-medium text-slate-500">Item Code</th>
-                    <th className="py-1 px-2 text-left font-medium text-slate-500">Name</th>
-                    <th className="py-1 px-2 text-center font-medium text-slate-500">Purch Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bomView?.standardParts
-                    .filter(p => selStd.has(p.id))
-                    .map(p => (
-                      <tr key={p.id}>
-                        <td className="py-1 px-2 font-mono text-slate-600">{p.itemCode}</td>
-                        <td className="py-1 px-2 text-slate-700 truncate max-w-[200px]">{p.productName}</td>
-                        <td className="py-1 px-2 text-center font-semibold text-indigo-600">{p.purchaseQty ?? '—'}</td>
+
+            {/* Existing Open POs */}
+            <div className="mt-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5 flex items-center gap-1.5">
+                Existing Open POs
+                {existingPosLoading && <span className="text-slate-400 font-normal normal-case">Loading…</span>}
+              </p>
+              {!existingPosLoading && (existingPosData?.purchaseOrdersByFixture.length ?? 0) === 0 ? (
+                <p className="text-xs text-slate-400 py-1">No existing POs for this fixture.</p>
+              ) : (
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="py-1.5 px-2 text-left font-medium text-slate-500">PO Number</th>
+                        <th className="py-1.5 px-2 text-left font-medium text-slate-500">Supplier</th>
+                        <th className="py-1.5 px-2 text-left font-medium text-slate-500">Status</th>
+                        <th className="py-1.5 px-2 text-left font-medium text-slate-500">Date</th>
+                        <th className="py-1.5 px-2 text-center font-medium text-slate-500">Order Qty</th>
                       </tr>
-                    ))}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {existingPosLoading
+                        ? [1, 2].map(i => (
+                          <tr key={i}>
+                            <td colSpan={5} className="py-1.5 px-2"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>
+                          </tr>
+                        ))
+                        : existingPosData!.purchaseOrdersByFixture.map(po => {
+                          const totalOrdered = po.lineItems.reduce((s, li) => s + (li.orderedQuantity ?? 0), 0)
+                          const dateStr = po.createdAt
+                            ? new Date(po.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'
+                          return (
+                            <tr key={po.id} className="hover:bg-slate-50">
+                              <td className="py-1.5 px-2 font-mono font-medium text-slate-700">{po.poNumber}</td>
+                              <td className="py-1.5 px-2 text-slate-600">{po.supplierName ?? '—'}</td>
+                              <td className="py-1.5 px-2">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                                  po.poStatus === 'Completed'
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : po.poStatus === 'CostingUpdated'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}>{po.poStatus ?? 'Created'}</span>
+                              </td>
+                              <td className="py-1.5 px-2 text-slate-500">{dateStr}</td>
+                              <td className="py-1.5 px-2 text-center font-semibold text-indigo-600">{totalOrdered}</td>
+                            </tr>
+                          )
+                        })
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+
+            {/* Standard Parts table */}
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5 flex items-center gap-1.5">
+                Selected Parts ({selStd.size})
+                {stdPartsLoading && <span className="text-slate-400 font-normal normal-case">Loading…</span>}
+                {!stdPartsLoading && (
+                  <span className="text-slate-400 font-normal normal-case">
+                    — {(stdPartsData?.standardPartsForPo ?? []).filter(p => selStd.has(p.id) && p.orderQty > 0).length} to order
+                  </span>
+                )}
+              </p>
+              <div className="max-h-[280px] overflow-y-auto border border-slate-200 rounded-md">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500">Item Code</th>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500">Name</th>
+                      <th className="py-1.5 px-2 text-left font-medium text-slate-500">Make</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">UOM</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">Expected</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">In Stock</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">Unit Price</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">Open Orders</th>
+                      <th className="py-1.5 px-2 text-center font-medium text-slate-500">Order Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {stdPartsLoading
+                      ? [1, 2, 3].map(i => (
+                        <tr key={i}>
+                          <td colSpan={9} className="py-2 px-2"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>
+                        </tr>
+                      ))
+                      : (stdPartsData?.standardPartsForPo ?? []).filter(p => selStd.has(p.id)).map(p => {
+                        const zeroOrder = p.orderQty <= 0
+                        return (
+                          <tr key={p.id} className={zeroOrder ? 'bg-red-50' : 'hover:bg-slate-50'}>
+                            <td className={`py-1.5 px-2 font-mono whitespace-nowrap ${zeroOrder ? 'text-red-400' : 'text-slate-600'}`}>{p.itemCode ?? '—'}</td>
+                            <td className={`py-1.5 px-2 max-w-[140px] truncate ${zeroOrder ? 'text-red-400' : 'text-slate-700'}`} title={p.productName ?? ''}>{p.productName ?? '—'}</td>
+                            <td className={`py-1.5 px-2 ${zeroOrder ? 'text-red-400' : 'text-slate-500'}`}>{p.productMake ?? '—'}</td>
+                            <td className={`py-1.5 px-2 text-center ${zeroOrder ? 'text-red-400' : 'text-slate-500'}`}>{p.uom ?? '—'}</td>
+                            <td className={`py-1.5 px-2 text-center font-medium ${zeroOrder ? 'text-red-400' : 'text-slate-700'}`}>{p.expectedQty}</td>
+                            <td className={`py-1.5 px-2 text-center ${zeroOrder ? 'text-red-400' : 'text-slate-500'}`}>{p.currentStock}</td>
+                            <td className={`py-1.5 px-2 text-center ${zeroOrder ? 'text-red-400' : 'text-slate-500'}`}>
+                              {p.purchaseUnitPrice != null ? p.purchaseUnitPrice.toFixed(2) : '—'}
+                            </td>
+                            <td className={`py-1.5 px-2 text-center ${zeroOrder ? 'text-red-400' : 'text-slate-500'}`}>{p.openOrderQty > 0 ? p.openOrderQty : '—'}</td>
+                            <td className={`py-1.5 px-2 text-center font-semibold ${zeroOrder ? 'text-red-500' : 'text-indigo-600'}`}>{p.orderQty}</td>
+                          </tr>
+                        )
+                      })
+                    }
+                  </tbody>
+                </table>
+              </div>
+              {!stdPartsLoading && (stdPartsData?.standardPartsForPo ?? []).some(p => selStd.has(p.id) && p.orderQty <= 0) && (
+                <p className="text-[10px] text-red-500 mt-1">Red rows have nothing left to order and will be skipped.</p>
+              )}
+            </div>
+
             <DialogFooter className="gap-2 sm:gap-0 mt-4">
               <Button type="button" variant="outline" onClick={() => setStdDlgOpen(false)}>
                 Cancel
@@ -1485,9 +1652,9 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                 type="button"
                 className="bg-indigo-600 hover:bg-indigo-700"
                 onClick={() => void handleConfirmStd()}
-                disabled={createStdPo.isPending || !supplierId || selStd.size === 0}
+                disabled={createStdPo.isPending || !supplierId || stdPartsLoading}
               >
-                {createStdPo.isPending ? 'Creating…' : 'Confirm'}
+                {createStdPo.isPending ? 'Creating…' : 'Create PO'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1522,6 +1689,31 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {markReceivedOpen && (
+        <MarkAsReceivedDialog
+          open={markReceivedOpen}
+          onOpenChange={(v) => { setMarkReceivedOpen(v); if (!v) { clearMfg(); clearStd() } }}
+          selectedMfgParts={(bomView?.manufacturedParts ?? []).filter((p) => selMfg.has(p.id))}
+          selectedStdParts={(bomView?.standardParts ?? []).filter((p) => selStd.has(p.id))}
+          fixtureId={fixture.id}
+        />
+      )}
+
+      {collectAssemblyOpen && (
+        <CollectByAssemblyDialog
+          open={collectAssemblyOpen}
+          onOpenChange={(v) => { setCollectAssemblyOpen(v); if (!v) { clearMfg(); clearStd() } }}
+          eligibleMfgParts={(bomView?.manufacturedParts ?? []).filter(
+            (p) => selMfg.has(p.id) && p.status === 'received' && (p.receivedQuantity ?? 0) > 0,
+          )}
+          eligibleStdParts={(bomView?.standardParts ?? []).filter(
+            (p) => selStd.has(p.id) && (p.qty ?? 0) > 0,
+          )}
+          assemblyUsers={assemblyUsersData?.users.items ?? []}
+          fixtureId={fixture.id}
+        />
       )}
     </div>
   )

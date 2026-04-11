@@ -173,7 +173,7 @@ export const PRODUCTS = `
       items {
         id itemCode name description make
         puUnitId stkUnitId puUnitName stkUnitName
-        procMtd locationInStore quantity isActive categoryId
+        procMtd locationInStore quantity unitPrice isActive categoryId
         createdBy createdByUsername modifiedBy modifiedByUsername createdAt modifiedAt
       }
       ${LIST_FIELDS}

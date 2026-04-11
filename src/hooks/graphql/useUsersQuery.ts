@@ -37,17 +37,17 @@ export interface PaginatedUsers {
   users: {
     items: User[];
     total: number;
-    skip: number;
-    limit: number;
     page: number;
     totalPages: number;
     hasMore: boolean;
+    firstPage: number;
+    lastPage: number;
   };
 }
 
 export interface GetUsersVariables {
-  skip: number;
-  limit: number;
+  page: number;
+  pageSize: number;
   roleId?: string | null;
 }
 
@@ -58,7 +58,7 @@ export interface GetUsersVariables {
 export const userKeys = {
   all: ['users'] as const,
   lists: () => [...userKeys.all, 'list'] as const,
-  list: (params?: GetUsersVariables) => [...userKeys.lists(), params ?? {}] as const,
+  list: (params?: Partial<GetUsersVariables>) => [...userKeys.lists(), params ?? {}] as const,
   details: () => [...userKeys.all, 'detail'] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
   current: () => [...userKeys.all, 'current'] as const,
@@ -71,37 +71,30 @@ export const userKeys = {
  * @param skip - Number of records to skip
  * @param limit - Number of records to fetch
  */
-export function useUsers(skip: number = 0, limit: number = 50, roleId?: string | null) {
+export function useUsers(page: number = 1, pageSize: number = 20, roleId?: string | null) {
   return useQuery({
-    queryKey: userKeys.list({ skip, limit, roleId }),
-    queryFn: () => executeGraphQL<PaginatedUsers>(GET_USERS, { skip, limit, ...(roleId ? { roleId } : {}) }),
+    queryKey: userKeys.list({ page, pageSize, roleId }),
+    queryFn: () => executeGraphQL<PaginatedUsers>(GET_USERS, {
+      page,
+      pageSize,
+      ...(roleId ? { roleId } : {}),
+    }),
     staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000,
     gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000,
   });
 }
 
-/**
- * Infinite query for hybrid pagination
- * Fetches data in batches (default 1000 rows) and auto-loads next batch
- * Perfect for large datasets with client-side pagination
- * 
- * @param pageSize - Batch size per request (default from env or 1000)
- */
-export function useInfiniteUsers(pageSize?: number) {
-  const batchSize = pageSize || Number(import.meta.env.VITE_GRAPHQL_BATCH_SIZE) || 1000;
-  
+/** @deprecated Use useUsers with page/pageSize instead */
+export function useInfiniteUsers(_pageSize?: number) {
   return useInfiniteQuery({
     queryKey: userKeys.lists(),
-    queryFn: ({ pageParam = 0 }) =>
-      executeGraphQL<PaginatedUsers>(GET_USERS, {
-        skip: pageParam,
-        limit: batchSize,
-      }),
+    queryFn: ({ pageParam = 1 }) =>
+      executeGraphQL<PaginatedUsers>(GET_USERS, { page: pageParam, pageSize: 200 }),
     getNextPageParam: (lastPage) => {
-      const { hasMore, skip, limit } = lastPage.users;
-      return hasMore ? skip + limit : undefined;
+      const { hasMore, page, totalPages } = lastPage.users;
+      return hasMore && page < totalPages ? page + 1 : undefined;
     },
-    initialPageParam: 0,
+    initialPageParam: 1,
     staleTime: Number(import.meta.env.VITE_CACHE_STALE_TIME) || 5 * 60 * 1000,
     gcTime: Number(import.meta.env.VITE_CACHE_GC_TIME) || 10 * 60 * 1000,
   });

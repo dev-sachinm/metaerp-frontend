@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { executeGraphQL } from '@/graphql/client'
 import {
   RECEIVE_STANDARD_PARTS,
@@ -6,7 +6,10 @@ import {
   UPDATE_MANUFACTURED_RECEIVED_QTY,
   UPDATE_MANUFACTURED_STATUS_BULK,
   UPDATE_STANDARD_PART_PURCHASE_UNIT_PRICE,
+  MARK_BOM_PARTS_RECEIVED,
+  COLLECT_BY_ASSEMBLY,
 } from '@/graphql/mutations/bomReceiving.mutations'
+import { GET_USERS_BY_ROLE_NAME } from '@/graphql/queries/users.queries'
 import { designKeys } from '@/hooks/graphql/useDesign'
 import { getErrorMessage, isPermissionError } from '@/lib/graphqlErrors'
 import { toast } from 'sonner'
@@ -92,6 +95,65 @@ export function useUpdateStandardPartPurchaseUnitPrice(fixtureId: string) {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update unit price'))
+    },
+  })
+}
+
+export interface AssemblyUser {
+  id: string
+  firstName?: string | null
+  lastName?: string | null
+  username?: string | null
+}
+
+export function useAssemblyUsers(enabled = true) {
+  return useQuery({
+    queryKey: ['users', 'assembly'] as const,
+    queryFn: () =>
+      executeGraphQL<{ users: { items: AssemblyUser[]; total: number } }>(
+        GET_USERS_BY_ROLE_NAME,
+        { roleName: 'Assembly', limit: 200 },
+      ),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useMarkBomPartsReceived(fixtureId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (items: { fixtureBomId: string; receivedQty: number }[]) =>
+      executeGraphQL<{ markBomPartsReceived: number }>(MARK_BOM_PARTS_RECEIVED, { items }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: ['design', 'bomView', fixtureId] })
+      toast.success(`Received quantity updated for ${data.markBomPartsReceived} item(s)`)
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update received quantities'))
+    },
+  })
+}
+
+export function useCollectByAssembly(fixtureId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: {
+      collectedByUserId: string
+      items: { fixtureBomId: string; collectedQuantity: number }[]
+    }) =>
+      executeGraphQL<{
+        collectByAssembly: { s3Key: string; downloadUrl: string }
+      }>(COLLECT_BY_ASSEMBLY, {
+        collectedByUserId: vars.collectedByUserId,
+        items: vars.items,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: ['design', 'bomView', fixtureId] })
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to collect by assembly'))
     },
   })
 }

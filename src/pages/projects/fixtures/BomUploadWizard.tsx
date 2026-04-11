@@ -25,6 +25,7 @@ import type {
   ParsedManufacturedPart,
   ParsedStandardPart,
   WrongEntryResolution,
+  BomParseWarning,
 } from '@/types/design'
 
 function StepDots({ current, total }: { current: number; total: number }) {
@@ -216,7 +217,8 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
     return true
   }).length
   const wrongStandardParts = (parsed?.standardParts ?? []).filter((p) => p.isWrongEntry).length
-  const canProceed = unresolvedCount === 0 && wrongStandardParts === 0
+  const parseErrors = parsed?.errors ?? []
+  const canProceed = unresolvedCount === 0 && wrongStandardParts === 0 && parseErrors.length === 0
 
   if (loading) {
     return (
@@ -238,7 +240,8 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
     )
   }
 
-  const { summary, manufacturedParts, standardParts, wrongEntries } = parsed
+  const { summary, manufacturedParts, standardParts, wrongEntries, warnings = [] } = parsed
+  const errors = parseErrors
 
   // Detect re-upload: any part has a non-null changeStatus
   const isReUpload = manufacturedParts.some(p => p.changeStatus != null) ||
@@ -269,12 +272,14 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
     <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
       {/* Summary */}
       {isReUpload ? (
-        <div className="grid grid-cols-4 gap-3 text-center">
+        <div className="grid grid-cols-3 gap-3 text-center">
           {[
             { label: 'Changed', value: summary.changedCount ?? 0, color: 'text-amber-600' },
             { label: 'Unchanged', value: summary.unchangedCount ?? 0, color: 'text-slate-500' },
             { label: 'Not Updatable', value: summary.notUpdatableCount ?? 0, color: 'text-red-500' },
             { label: 'Wrong Entries', value: summary.wrongEntryCount, color: 'text-red-600' },
+            { label: 'Errors', value: summary.errorCount ?? 0, color: 'text-red-700' },
+            { label: 'PDF-only (not in Excel)', value: summary.warningCount ?? 0, color: 'text-amber-700' },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 py-3">
               <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -283,12 +288,14 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-3 text-center">
+        <div className="grid grid-cols-3 gap-3 text-center">
           {[
             { label: 'Manufactured', value: summary.totalManufactured, color: 'text-indigo-600' },
             { label: 'Standard', value: summary.totalStandard, color: 'text-teal-600' },
             { label: 'Wrong Entries', value: summary.wrongEntryCount, color: 'text-red-600' },
             { label: 'Duplicates (skip)', value: duplicateCount, color: 'text-amber-600' },
+            { label: 'Errors', value: summary.errorCount ?? 0, color: 'text-red-700' },
+            { label: 'PDF-only (not in Excel)', value: summary.warningCount ?? 0, color: 'text-amber-700' },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 py-3">
               <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -524,6 +531,55 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
         </div>
       )}
 
+      {/* Errors — drawings with no PDF directory (blocking) */}
+      {errors.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">
+            Errors ({errors.length})
+          </h4>
+          <p className="text-xs text-red-700 mb-2">
+            The following drawings have no PDF directory in the ZIP. Re-upload the ZIP with the missing directories before submitting.
+          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 divide-y text-xs">
+            {errors.map((e, i) => (
+              <div key={i} className="px-3 py-1.5 text-red-700 flex items-start gap-1.5">
+                <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Row {e.rowNum}: {e.rawValue ?? '(no value)'} — {e.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Warnings — drawings in ZIP but not in BOM Excel (non-blocking) */}
+      {warnings.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
+            PDF-only Drawings ({warnings.length})
+          </h4>
+          <p className="text-xs text-amber-700 mb-2">
+            These drawings were found in the ZIP but are not listed in your BOM Excel. They have been included using PDF-parsed values. Please verify before submitting.
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 divide-y text-xs">
+            {warnings.map((w: BomParseWarning, i) => (
+              <div key={i} className="px-3 py-2 text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                <div className="space-y-0.5">
+                  <span className="font-mono font-semibold">{w.drawingNo}</span>
+                  {w.description && (
+                    <p><span className="text-amber-600 font-medium">Description:</span> {w.description}</p>
+                  )}
+                  {w.qty != null && (
+                    <p><span className="text-amber-600 font-medium">Qty:</span> {w.qty}</p>
+                  )}
+                  <p className="text-amber-600 italic">{w.note}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Wrong-entry summary */}
       {wrongEntries.length > 0 && (
         <div>
@@ -548,7 +604,12 @@ function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Pro
               Failed to submit — please try again.
             </span>
           )}
-          {!canProceed && (
+          {errors.length > 0 && (
+            <span className="text-xs text-red-600 font-medium">
+              {errors.length} drawing{errors.length === 1 ? '' : 's'} {errors.length === 1 ? 'has' : 'have'} no PDF directory — re-upload the ZIP to proceed
+            </span>
+          )}
+          {errors.length === 0 && !canProceed && (
             <span className="text-xs text-red-600 font-medium">
               {unresolvedCount} wrong {unresolvedCount === 1 ? 'entry' : 'entries'} must be skipped or corrected
             </span>

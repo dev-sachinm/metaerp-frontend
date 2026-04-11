@@ -10,7 +10,7 @@ import {
 import { designKeys } from '@/hooks/graphql/useDesign'
 import { poKeys } from '@/hooks/graphql/usePurchaseOrderQueries'
 import { getErrorMessage, isPermissionError } from '@/lib/graphqlErrors'
-import type { PurchaseOrderCreateResult } from '@/types/purchaseOrder'
+import type { PurchaseOrderCreateResult, StandardPoPartInput } from '@/types/purchaseOrder'
 import { toast } from 'sonner'
 
 export function useCreateManufacturedPo(fixtureId: string) {
@@ -36,14 +36,16 @@ export function useCreateManufacturedPo(fixtureId: string) {
 export function useCreateStandardPo(fixtureId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (vars: { partIds: string[]; supplierId: string }) =>
+    mutationFn: (vars: { parts: StandardPoPartInput[]; supplierId: string }) =>
       executeGraphQL<{ createStandardPo: PurchaseOrderCreateResult }>(CREATE_STANDARD_PO, {
         fixtureId,
-        partIds: vars.partIds,
+        parts: vars.parts,
         supplierId: vars.supplierId,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: poKeys.byFixture(fixtureId, 'StandardPart') })
+      queryClient.invalidateQueries({ queryKey: poKeys.standardPartsForPo(fixtureId) })
       const po = data.createStandardPo
       toast.success(`Standard PO created: ${po.poNumber}`)
     },
@@ -80,6 +82,24 @@ export function useUpdatePurchaseOrder(id: string) {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update purchase order'))
+    },
+  })
+}
+
+export function useTogglePOCosting() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enableCosting }: { id: string; enableCosting: boolean }) =>
+      executeGraphQL<{ updatePurchaseOrder: PurchaseOrderCreateResult }>(UPDATE_PURCHASE_ORDER, {
+        id,
+        input: { enableCosting },
+      }),
+    onSuccess: (_, { enableCosting }) => {
+      queryClient.invalidateQueries({ queryKey: poKeys.lists() })
+      toast.success(`Costing ${enableCosting ? 'enabled' : 'disabled'}`)
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update costing flag'))
     },
   })
 }

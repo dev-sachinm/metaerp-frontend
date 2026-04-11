@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit2, Download, FileText, Plus, Save, X, Upload } from 'lucide-react'
+import { ArrowLeft, Edit2, Download, FileText, Plus, Save, X, Upload, Send, Paperclip } from 'lucide-react'
 import { usePurchaseOrder } from '@/hooks/graphql/usePurchaseOrderQueries'
 import { useUpdatePurchaseOrder } from '@/hooks/graphql/usePurchaseOrderMutations'
 import { useExpenseCategoriesList } from '@/hooks/graphql/useMasterDataQueries'
 import { useCanAccess } from '@/hooks/usePermissions'
+import { isPermissionError } from '@/lib/graphqlErrors'
 import { useCurrentUser } from '@/stores/authStore'
 import { Loader } from '@/components/Loader'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format } from 'date-fns'
 import { executeGraphQL } from '@/graphql/client'
-import { EXPORT_PO_LINE_ITEMS_XLSX, GET_PO_ATTACHMENT_DOWNLOAD_URL } from '@/graphql/queries/purchaseOrder.queries'
+import { GET_PO_ATTACHMENT_DOWNLOAD_URL, GET_PO_ATTACHMENT_UPLOAD_URL } from '@/graphql/queries/purchaseOrder.queries'
 import { toast } from 'sonner'
 
 import { DashboardLayout } from '@/layouts/DashboardLayout'
@@ -34,37 +35,49 @@ export function ViewPurchaseOrder() {
   const canUpdateBom = useCanAccess('fixture_bom', 'update')
 
   const isMiscPo = po?.poType === 'Miscellaneous'
-  const canEditLines = canUpdate && (isMiscPo || canUpdateBom)
-  const canCosting = canUpdate && isProcurement && !isMiscPo
+  const isManufacturedPo = po?.poType === 'ManufacturedPart'
+  const isCompleted = po?.poStatus === 'Completed'
+  const isStandardPo = po?.poType === 'StandardPart'
+  const canEditLines = canUpdate && !isManufacturedPo && !isCompleted && (isMiscPo || isStandardPo || canUpdateBom)
+  const canCosting = canUpdate && isManufacturing && isManufacturedPo
 
   const [isEditingLines, setIsEditingLines] = useState(false)
   const [draftLines, setDraftLines] = useState<any[]>([])
   const [costingOpen, setCostingOpen] = useState(false)
 
-  const [isExporting, setIsExporting] = useState(false)
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [attachUploadError, setAttachUploadError] = useState<string | null>(null)
 
-  const handleExportXlsx = async () => {
-    try {
-      setIsExporting(true)
-      const data = await executeGraphQL<{ exportPurchaseOrderLineItemsXlsx: { s3Key: string; downloadUrl: string } }>(EXPORT_PO_LINE_ITEMS_XLSX, { id: po!.id })
-      const downloadUrl = data.exportPurchaseOrderLineItemsXlsx.downloadUrl
-      if (!downloadUrl) {
-        toast.error('No data to export')
+  const STANDARD_PO_ALLOWED = new Set(['.xlsx', '.xls', '.pdf', '.csv', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'])
+
+  const handleAttachmentUpload = async (file: File) => {
+    setAttachUploadError(null)
+    if (isStandardPo) {
+      const ext = '.' + file.name.split('.').pop()!.toLowerCase()
+      if (!STANDARD_PO_ALLOWED.has(ext)) {
+        setAttachUploadError(`File type "${ext}" is not allowed for Standard Part POs. Allowed: Excel, PDF, CSV, and images.`)
         return
       }
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.setAttribute('download', `PO_${po!.poNumber}_LineItems.xlsx`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    } catch (e) {
-      toast.error('Failed to export Excel')
+    }
+    try {
+      setIsUploading(true)
+      const urlData = await executeGraphQL<{ getPurchaseOrderAttachmentUploadUrl: { uploadUrl: string; s3Key: string } }>(
+        GET_PO_ATTACHMENT_UPLOAD_URL, { poId: po!.id, filename: file.name }
+      )
+      const { uploadUrl, s3Key } = urlData.getPurchaseOrderAttachmentUploadUrl
+      await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } })
+      await updateMutation.mutateAsync({ attachmentsToAdd: [{ s3Key, filename: file.name }] })
+      toast.success(`"${file.name}" attached`)
+    } catch (e: any) {
+      const msg = e?.response?.errors?.[0]?.message ?? e?.message ?? 'Upload failed'
+      setAttachUploadError(msg)
     } finally {
-      setIsExporting(false)
+      setIsUploading(false)
+      if (attachmentInputRef.current) attachmentInputRef.current.value = ''
     }
   }
+
 
   const handleDownloadAttachment = async (s3Key: string, fallbackFilename?: string | null) => {
     try {
@@ -119,6 +132,9 @@ export function ViewPurchaseOrder() {
       return {
         ...rest,
         miscellaneousLineItemCost: parseFloat(rest.miscellaneousLineItemCost) || 0,
+        ...(purchaseUnitPrice != null && purchaseUnitPrice !== ''
+          ? { purchaseUnitPrice: parseFloat(purchaseUnitPrice) }
+          : {}),
       }
     })
 
@@ -141,10 +157,30 @@ export function ViewPurchaseOrder() {
   }
 
   if (isError || !po) {
+    const isAccessDenied = isPermissionError(error)
     return (
       <DashboardLayout>
-        <div className="p-12 text-center text-red-500">
-          Failed to load purchase order details: {error?.message || 'Not found'}
+        <div className="p-12 flex flex-col items-center gap-4 text-center">
+          {isAccessDenied ? (
+            <>
+              <div className="text-4xl">🔒</div>
+              <h2 className="text-lg font-semibold text-slate-800">Access Denied</h2>
+              <p className="text-sm text-slate-500 max-w-sm">
+                You don't have permission to view this purchase order. It may belong to another user.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold text-red-600">Failed to load purchase order</h2>
+              <p className="text-sm text-slate-500">{error?.message || 'Not found'}</p>
+            </>
+          )}
+          <button
+            onClick={() => navigate('/purchase-orders')}
+            className="mt-2 text-sm text-indigo-600 hover:underline"
+          >
+            ← Back to Purchase Orders
+          </button>
         </div>
       </DashboardLayout>
     )
@@ -170,6 +206,16 @@ export function ViewPurchaseOrder() {
             <p className="text-sm text-slate-500 mt-1">{po.title}</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            disabled={!po.enableCosting}
+            title={!po.enableCosting ? 'Costing is not enabled for this PO' : undefined}
+          >
+            <Send className="h-4 w-4" /> Send
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -179,15 +225,17 @@ export function ViewPurchaseOrder() {
               <h2 className="text-lg font-semibold text-slate-800">Line Items</h2>
               <div className="flex gap-2">
                 {canCosting && !isEditingLines && (
-                  <Button variant="outline" size="sm" onClick={() => setCostingOpen(true)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCostingOpen(true)}
+                    disabled={!po.enableCosting}
+                    title={!po.enableCosting ? 'Costing is not enabled for this PO' : undefined}
+                  >
                     <Upload className="h-3.5 w-3.5 mr-2" /> Costing
                   </Button>
                 )}
-                {!isEditingLines && po.lineItems.length > 0 && (
-                  <Button variant="outline" size="sm" onClick={handleExportXlsx} disabled={isExporting}>
-                    <Download className="h-3.5 w-3.5 mr-2" /> {isExporting ? 'Exporting...' : 'Export Excel'}
-                  </Button>
-                )}
+
                 {canEditLines && !isEditingLines && (
                   <Button variant="outline" size="sm" onClick={startEditLines}>
                     <Edit2 className="h-3.5 w-3.5 mr-2" /> Edit Lines
@@ -215,7 +263,8 @@ export function ViewPurchaseOrder() {
                     </th>
                     {!isMiscPo && <th className="px-3 py-2 text-center">Qty</th>}
                     {!isMiscPo && <th className="px-3 py-2 text-center">Received</th>}
-                    {!isMiscPo && !isManufacturing && <th className="px-3 py-2 text-right">Unit Price</th>}
+                    {!isMiscPo && <th className="px-3 py-2 text-right">Unit Price</th>}
+                    {isManufacturedPo && <th className="px-3 py-2 text-right">Total</th>}
                     {!isMiscPo && <th className="px-3 py-2 text-center">Status</th>}
                     {isMiscPo && <th className="px-3 py-2 text-right">Expense Category</th>}
                     {isMiscPo && <th className="px-3 py-2 text-right">Misc Cost</th>}
@@ -236,7 +285,12 @@ export function ViewPurchaseOrder() {
                           </td>
                           {!isMiscPo && <td className="px-3 py-2 text-center font-medium">{item.quantity ?? '—'}</td>}
                           {!isMiscPo && <td className="px-3 py-2 text-center font-medium">{item.receivedQuantity ?? '—'}</td>}
-                          {!isMiscPo && !isManufacturing && <td className="px-3 py-2 text-right font-mono">{item.purchaseUnitPrice != null ? item.purchaseUnitPrice.toFixed(2) : '—'}</td>}
+                          {!isMiscPo && <td className="px-3 py-2 text-right font-mono">{item.purchaseUnitPrice != null ? item.purchaseUnitPrice.toFixed(2) : '—'}</td>}
+                          {isManufacturedPo && <td className="px-3 py-2 text-right font-mono text-slate-700">
+                            {item.purchaseUnitPrice != null && item.quantity != null
+                              ? (item.purchaseUnitPrice * item.quantity).toFixed(2)
+                              : '—'}
+                          </td>}
                           {!isMiscPo && <td className="px-3 py-2 text-center">
                             {item.status ? (
                               <Badge variant="secondary" className="text-[10px] font-mono">{item.status}</Badge>
@@ -252,7 +306,7 @@ export function ViewPurchaseOrder() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={isMiscPo ? 3 : isManufacturing ? 4 : 5} className="px-3 py-4 text-center text-slate-500">No line items.</td>
+                        <td colSpan={isMiscPo ? 3 : isManufacturedPo ? 6 : 5} className="px-3 py-4 text-center text-slate-500">No line items.</td>
                       </tr>
                     )
                   ) : (
@@ -278,7 +332,7 @@ export function ViewPurchaseOrder() {
                           {!isMiscPo && <td className="px-1 py-2 text-center text-slate-500 text-sm">
                             {item.receivedQuantity ?? '—'}
                           </td>}
-                          {!isMiscPo && !isManufacturing && <td className="px-1 py-2">
+                          {!isMiscPo && <td className="px-1 py-2">
                             <Input 
                               className="h-8 text-sm w-24 text-right ml-auto" 
                               type="number" step="any" min={0}
@@ -286,6 +340,11 @@ export function ViewPurchaseOrder() {
                               onChange={(e) => handleDraftChange(index, 'purchaseUnitPrice', e.target.value)} 
                               disabled={!item.fixtureBomId || !canUpdateBom}
                             />
+                          </td>}
+                          {isManufacturedPo && <td className="px-1 py-2 text-right font-mono text-sm text-slate-500">
+                            {item.purchaseUnitPrice != null && item.quantity != null
+                              ? (parseFloat(item.purchaseUnitPrice) * item.quantity).toFixed(2)
+                              : '—'}
                           </td>}
                           {!isMiscPo && <td className="px-1 py-2 text-center text-slate-500 text-sm">
                             {item.status ?? '—'}
@@ -384,7 +443,7 @@ export function ViewPurchaseOrder() {
             
           </div>
 
-          {!isManufacturing && po.lineItemsSummary && (
+          {po.lineItemsSummary && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
               <h2 className="text-lg font-semibold text-slate-800 border-b pb-2 mb-4">Summary</h2>
               <div className="space-y-3 text-sm">
@@ -400,10 +459,43 @@ export function ViewPurchaseOrder() {
             </div>
           )}
 
-          {!isManufacturing && <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-2">
               <h2 className="text-lg font-semibold text-slate-800">Attachments</h2>
+              {isStandardPo && canUpdate && isProcurement && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setAttachUploadError(null); attachmentInputRef.current?.click() }}
+                  disabled={isUploading}
+                >
+                  <Paperclip className="h-3.5 w-3.5 mr-2" />
+                  {isUploading ? 'Uploading…' : 'Attach File'}
+                </Button>
+              )}
             </div>
+
+            {isStandardPo && (
+              <p className="text-xs text-slate-400">
+                Allowed: Excel (.xlsx, .xls), PDF, CSV, and images (.jpg, .jpeg, .png)
+              </p>
+            )}
+
+            {attachUploadError && (
+              <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <X className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{attachUploadError}</span>
+              </div>
+            )}
+
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              className="hidden"
+              accept={isStandardPo ? '.xlsx,.xls,.pdf,.csv,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,image/*' : undefined}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAttachmentUpload(f) }}
+            />
+
             {po.parsedAttachments && po.parsedAttachments.length > 0 ? (
               <div className="space-y-2">
                 {po.parsedAttachments.map((att, idx) => (
@@ -429,7 +521,7 @@ export function ViewPurchaseOrder() {
             ) : (
               <p className="text-sm text-slate-500 text-center py-4">No attachments</p>
             )}
-          </div>}
+          </div>
         </div>
       </div>
     </div>
@@ -438,6 +530,7 @@ export function ViewPurchaseOrder() {
         open={costingOpen}
         onOpenChange={setCostingOpen}
         poId={po.id}
+        fixtureId={po.fixtureId ?? undefined}
       />
     )}
     </DashboardLayout>

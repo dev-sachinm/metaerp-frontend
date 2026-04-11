@@ -46,6 +46,7 @@ import { EditVendor } from './pages/master/EditVendor'
 import { PurchaseOrdersList } from './pages/purchase-orders/PurchaseOrdersList'
 import { CreatePurchaseOrder } from './pages/purchase-orders/CreatePurchaseOrder'
 import { ViewPurchaseOrder } from './pages/purchase-orders/ViewPurchaseOrder'
+import { EditPurchaseOrder } from './pages/purchase-orders/EditPurchaseOrder'
 import { ProjectsList } from './pages/projects/ProjectsList'
 import { ProjectAssignmentPage } from './pages/projects/ProjectAssignmentPage'
 import { ViewProject } from './pages/projects/ViewProject'
@@ -53,6 +54,7 @@ import { EditProject } from './pages/projects/EditProject'
 import { EmailsList } from './pages/email/EmailsList'
 import { AuditLogsList } from './pages/audit/AuditLogsList'
 import { ViewEmail } from './pages/email/ViewEmail'
+import { SuperadminDashboardPage } from './pages/dashboard/SuperadminDashboardPage'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuthQueries'
@@ -82,9 +84,10 @@ function AppContent() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
   const [initTimedOut, setInitTimedOut] = useState(false)
+  const isInitialized = useIsInitialized()
+  const user = useAuthStore((state) => state.user)
+  useEnabledModulesQuery({ enabled: !!user })
 
-  // Fail-safe: if auth bootstrap keeps loading too long with an existing token,
-  // show a clear backend-unreachable screen instead of infinite spinner.
   useEffect(() => {
     setInitTimedOut(false)
     if (!accessToken) return
@@ -97,21 +100,10 @@ function AppContent() {
     return () => window.clearTimeout(timer)
   }, [accessToken, isLoading])
 
-  // Initialize auth on mount
   useEffect(() => {
     if (isLoading) return
-
-    // Note: useAuth hook already syncs user and permissions to store via its own useEffects
-    // Token is already restored from localStorage on app load
-    // We just need to mark initialization as complete
     setIsInitialized(true)
   }, [isLoading, setIsInitialized])
-
-  const isInitialized = useIsInitialized()
-  const user = useAuthStore((state) => state.user)
-
-  // All hooks must be called before any early returns (Rules of Hooks)
-  useEnabledModulesQuery({ enabled: !!user })
 
   if (!isInitialized && initTimedOut) {
     return (
@@ -576,7 +568,7 @@ function AppContent() {
           ) : user ? (
             <RequireModule moduleId="master_data">
               <ProtectedRoute entity="purchase_order" action="update">
-                <ViewPurchaseOrder />
+                <EditPurchaseOrder />
               </ProtectedRoute>
             </RequireModule>
           ) : (
@@ -712,6 +704,24 @@ function AppContent() {
           ) : user ? (
             <RequireModule moduleId="project_management">
               <ProjectAssignmentPage />
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* Superadmin Dashboard */}
+      <Route
+        path="/dashboard/superadmin"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <SuperadminDashboardPage />
             </RequireModule>
           ) : (
             <Navigate to="/login" replace />

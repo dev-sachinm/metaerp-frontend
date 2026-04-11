@@ -12,17 +12,17 @@ import { UserFieldsFragment, UserDetailFragment } from '../fragments/user.fragme
 export const GET_USERS = `
   ${UserFieldsFragment}
   
-  query GetUsers($skip: Int!, $limit: Int!, $roleId: String) {
-    users(skip: $skip, limit: $limit, roleId: $roleId) {
+  query GetUsers($page: Int, $pageSize: Int, $roleId: String) {
+    users(page: $page, pageSize: $pageSize, roleId: $roleId) {
       items {
         ...UserFields
       }
       total
-      skip
-      limit
       page
       totalPages
       hasMore
+      firstPage
+      lastPage
     }
   }
 `;
@@ -52,6 +52,24 @@ export const GET_CURRENT_USER = `
   query GetCurrentUser {
     currentUser {
       ...UserDetail
+    }
+  }
+`;
+
+/**
+ * Get users by role name (lightweight, no fragments)
+ * Used for Assembly user dropdown in BOM Collected by Assembly flow
+ */
+export const GET_USERS_BY_ROLE_NAME = `
+  query GetUsersByRoleName($roleName: String!, $limit: Int!) {
+    users(roleName: $roleName, limit: $limit) {
+      items {
+        id
+        firstName
+        lastName
+        username
+      }
+      total
     }
   }
 `;

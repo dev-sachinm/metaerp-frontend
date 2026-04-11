@@ -5,9 +5,11 @@ export const PARSE_COSTING_EXCEL = `
       rows {
         drawingNumber
         purchaseUnitPrice
-        quantity
+        qtyLh
+        qtyRh
         totalCost
         matched
+        quantityMismatch
       }
       unmatchedDrawingNumbers
     }

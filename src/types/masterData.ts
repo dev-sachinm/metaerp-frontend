@@ -142,6 +142,7 @@ export interface Product {
   procMtd?: string | null
   locationInStore?: string | null
   quantity: number | null
+  unitPrice?: number | null
   isActive: boolean
   createdBy?: string | null
   createdByUsername?: string | null

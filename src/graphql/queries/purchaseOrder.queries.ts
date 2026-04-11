@@ -1,6 +1,20 @@
 export const GET_PURCHASE_ORDERS = `
-  query GetPurchaseOrders($skip: Int, $limit: Int, $isActive: Boolean) {
-    purchaseOrders(skip: $skip, limit: $limit, isActive: $isActive) {
+  query ListPurchaseOrders(
+    $page: Int
+    $pageSize: Int
+    $isActive: Boolean
+    $poNumberContains: String
+    $titleContains: String
+    $poStatusContains: String
+  ) {
+    purchaseOrders(
+      page: $page
+      pageSize: $pageSize
+      isActive: $isActive
+      poNumberContains: $poNumberContains
+      titleContains: $titleContains
+      poStatusContains: $poStatusContains
+    ) {
       items {
         id
         poNumber
@@ -9,21 +23,25 @@ export const GET_PURCHASE_ORDERS = `
         projectId
         projectName
         fixtureId
+        vendorId
         vendorName
+        supplierId
         supplierName
         poSendDate
         poStatus
         costingUpdatedDate
         completedDate
+        enableCosting
         isActive
         createdAt
+        createdByUsername
       }
       total
-      skip
-      limit
       page
       totalPages
       hasMore
+      firstPage
+      lastPage
     }
   }
 `
@@ -55,6 +73,44 @@ export const GET_PO_ATTACHMENT_DOWNLOAD_URL = `
     }
   }
 `
+export const PURCHASE_ORDERS_BY_FIXTURE = `
+  query PurchaseOrdersByFixture($fixtureId: String!, $poType: String, $partIds: [String!]) {
+    purchaseOrdersByFixture(fixtureId: $fixtureId, poType: $poType, partIds: $partIds) {
+      id
+      poNumber
+      poStatus
+      supplierName
+      createdAt
+      lineItems {
+        fixtureBomId
+        drawingNumber
+        quantity
+        orderedQuantity
+      }
+    }
+  }
+`
+
+export const STANDARD_PARTS_FOR_PO = `
+  query StandardPartsForPo($fixtureId: String!) {
+    standardPartsForPo(fixtureId: $fixtureId) {
+      id
+      itemCode
+      productName
+      productMake
+      uom
+      lhRh
+      expectedQty
+      currentStock
+      openOrderQty
+      orderQty
+      purchaseUnitPrice
+      supplierId
+      supplierName
+    }
+  }
+`
+
 export const GET_PURCHASE_ORDER = `
   query GetPurchaseOrder($id: String!) {
     purchaseOrder(id: $id) {
@@ -74,6 +130,7 @@ export const GET_PURCHASE_ORDER = `
       poStatus
       costingUpdatedDate
       completedDate
+      enableCosting
       isActive
       createdAt
       modifiedAt

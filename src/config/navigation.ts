@@ -21,7 +21,9 @@ export interface NavItemConfig {
   /** If set, user must have THIS specific action (not just any) on the entity */
   requiredAction?: 'create' | 'read' | 'update' | 'delete' | 'list'
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit' | 'purchase_order'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit' | 'purchase_order' | 'superadmin_dashboard'
+  /** If set, item is only shown to users who have this role */
+  requireRole?: string
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -31,6 +33,13 @@ export const NAV_ITEMS: NavItemConfig[] = [
     path: '/',
     label: 'Dashboard',
     icon: 'dashboard',
+  },
+  {
+    moduleId: 'core',
+    path: '/dashboard/superadmin',
+    label: 'Superadmin Dashboard',
+    icon: 'superadmin_dashboard',
+    requireRole: 'superadmin',
   },
   {
     moduleId: 'core',
@@ -81,6 +90,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
 /** Module IDs that own routes; use with RequireModule */
 export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/': 'core',
+  '/dashboard/superadmin': 'core',
   '/users': 'core',
   '/users/create': 'core',
   '/users/:id/access': 'core',

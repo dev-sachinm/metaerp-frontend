@@ -61,14 +61,55 @@ export interface PurchaseOrderSummary {
   projectId?: string | null
   projectName?: string | null
   fixtureId?: string | null
+  vendorId?: string | null
   vendorName?: string | null
+  supplierId?: string | null
   supplierName?: string | null
   poSendDate?: string | null
   poStatus?: string | null
   costingUpdatedDate?: string | null
   completedDate?: string | null
+  enableCosting?: boolean | null
   isActive: boolean
   createdAt?: string | null
+  createdByUsername?: string | null
+}
+
+export interface StandardPoPartInput {
+  partId: string
+  orderedQty: number
+}
+
+export interface PoByFixtureLineItem {
+  fixtureBomId?: string | null
+  drawingNumber?: string | null
+  quantity?: number | null
+  orderedQuantity?: number | null
+}
+
+export interface PoByFixture {
+  id: string
+  poNumber: string
+  poStatus?: string | null
+  supplierName?: string | null
+  createdAt?: string | null
+  lineItems: PoByFixtureLineItem[]
+}
+
+export interface StandardPartForPo {
+  id: string
+  itemCode?: string | null
+  productName?: string | null
+  productMake?: string | null
+  uom?: string | null
+  lhRh?: string | null
+  expectedQty: number
+  currentStock: number
+  openOrderQty: number
+  orderQty: number
+  purchaseUnitPrice?: number | null
+  supplierId?: string | null
+  supplierName?: string | null
 }
 
 /** Minimal PO shape returned by create mutations */

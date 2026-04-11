@@ -76,6 +76,12 @@ export function ProductsList() {
     if (canShowColumn(readableFields, 'stkUnitId')) cols.push({ header: 'Stock Unit', cell: (r: Product) => r.stkUnitName ?? r.stkUnitId ?? '—' })
     if (canShowColumn(readableFields, 'locationInStore')) cols.push({ header: 'Location', cell: (r: Product) => r.locationInStore ?? '—' })
     if (canShowColumn(readableFields, 'quantity')) cols.push({ header: 'Stock', cell: (r: Product) => r.quantity ?? '—' })
+    if (canShowColumn(readableFields, 'unitPrice')) {
+      cols.push({
+        header: 'Unit Price',
+        cell: (r: Product) => r.unitPrice != null ? r.unitPrice.toFixed(2) : '—',
+      })
+    }
     if (canShowColumn(readableFields, 'isActive')) {
       cols.push({
         header: 'Status',
