@@ -1,0 +1,9 @@
+# METAERP Frontend — Low-Token Root
+
+Primary guidance lives in `.cursor/rules/*.mdc`.
+
+Defaults:
+- Work in `/home/sachin/Documents/METAERP_DEV/fe`.
+- API contract source: `context/BACKEND_IMPLEMENTATION_STATE.md`.
+- Use narrow reads/searches only.
+- Keep responses concise: decision, changed files, verification.

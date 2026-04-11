@@ -97,15 +97,37 @@ export interface VendorInput {
   address?: string | null
   isActive?: boolean
 }
+/** Public-facing input (uses doc field names partNo/unitId).
+ *  Internally mapped to backend field names itemCode/puUnitId before sending. */
 export interface ProductInput {
   name: string
   categoryId?: string | null
-  partNo?: string | null
+  itemCode?: string | null
   description?: string | null
   make?: string | null
-  unitId?: string | null
+  puUnitId?: string | null
+  stkUnitId?: string | null
+  procMtd?: string | null
+  locationInStore?: string | null
   quantity?: number | null
   isActive?: boolean
+}
+
+/** Map doc-style ProductInput to the live backend ProductInput field names */
+function toBackendProductInput(input: ProductInput) {
+  return {
+    name: input.name,
+    categoryId: input.categoryId ?? null,
+    itemCode: input.itemCode ?? null,
+    description: input.description ?? null,
+    make: input.make ?? null,
+    puUnitId: input.puUnitId ?? null,
+    stkUnitId: input.stkUnitId ?? null,
+    procMtd: input.procMtd ?? null,
+    locationInStore: input.locationInStore ?? null,
+    quantity: input.quantity ?? null,
+    isActive: input.isActive ?? true,
+  }
 }
 
 function invalidateMasterDataLists(queryClient: ReturnType<typeof useQueryClient>) {
@@ -433,7 +455,7 @@ export function useCreateProduct() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: ProductInput) =>
-      executeGraphQL<{ createProduct: unknown }>(CREATE_PRODUCT, { input }),
+      executeGraphQL<{ createProduct: unknown }>(CREATE_PRODUCT, { input: toBackendProductInput(input) }),
     onSuccess: () => {
       invalidateMasterDataLists(qc)
       toast.success('Product created')
@@ -446,7 +468,7 @@ export function useUpdateProduct() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: ProductInput }) =>
-      executeGraphQL<{ updateProduct: unknown }>(UPDATE_PRODUCT, { id, input }),
+      executeGraphQL<{ updateProduct: unknown }>(UPDATE_PRODUCT, { id, input: toBackendProductInput(input) }),
     onSuccess: () => {
       invalidateMasterDataLists(qc)
       toast.success('Product updated')

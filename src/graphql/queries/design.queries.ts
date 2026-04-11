@@ -1,6 +1,6 @@
 export const GET_FIXTURES = `
-  query Fixtures($projectId: String!, $skip: Int, $limit: Int, $status: String) {
-    fixtures(projectId: $projectId, skip: $skip, limit: $limit, status: $status) {
+  query Fixtures($projectId: String!, $skip: Int, $limit: Int, $status: String, $isActive: Boolean) {
+    fixtures(projectId: $projectId, skip: $skip, limit: $limit, status: $status, isActive: $isActive) {
       items {
         id fixtureNumber fixtureSeq status isActive
         bomFilename bomUploadedAt
@@ -32,19 +32,28 @@ export const GET_BOM_VIEW = `
       fixtureId: $fixtureId
       drawingNoContains: $drawingNo
       drawingDescriptionContains: $drawingDesc
-      standardPartPartNoContains: $stdPartNo
+      standardPartItemCodeContains: $stdPartNo
       standardPartNameContains: $stdName
       standardPartMakeContains: $stdMake
     ) {
       fixture { id fixtureNumber status }
       manufacturedParts {
-        id drawingNo description qtyLh qtyRh status
+        id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
+        vendorId vendorName
         fixtureSeq unitSeq partSeq drawingFileS3Key
+        pendingAt inprogressAt qualityCheckedAt receivedAt
+        collectedByassemblyQuantity collectedByUserId collectedAt
       }
       standardParts {
-        id productId partNo productName productMake
-        srNo qty unitId
-        currentStock expectedQty purchaseQty
+        id fixtureId productId unitId supplierId supplierName
+        uom lhRh
+        itemCode productName productMake
+        qty expectedQty
+        currentStock
+        purchaseQty
+        purchaseUnitPrice
+        fixtureSeq unitSeq partSeq
+        collectedByassemblyQuantity collectedByUserId collectedAt
       }
     }
   }
@@ -79,16 +88,19 @@ export const PARSE_PROJECT_BOM_FILE = `
         totalManufactured
         totalStandard
         wrongEntryCount
+        errorCount
+        warningCount
         duplicateDrawingCount
         newFixtureSeqs
         existingFixtureSeqs
+        bomFixtureSeq
+        fixtureMismatchCount
       }
       manufacturedParts {
-        srNo
         drawingNo
         description
-        qtyLh
-        qtyRh
+        qty
+        lhRh
         isWrongEntry
         wrongEntryReason
         fixtureSeq
@@ -103,15 +115,21 @@ export const PARSE_PROJECT_BOM_FILE = `
         existingFixtureNumber
       }
       standardParts {
-        srNo
-        partNumber
+        drawingNo
+        itemCode
         description
-        make
         qty
-        unit
-        similarProducts { id partNo name make }
+        lhRh
+        productFound
+        productId
+        isWrongEntry
+        wrongEntryReason
+        fixtureSeq
+        unitSeq
       }
-      wrongEntries { rowNum srNo rawValue reason }
+      wrongEntries { rowNum rawValue reason }
+      errors { rowNum rawValue reason }
+      warnings { drawingNo description qty note }
     }
   }
 `
@@ -123,14 +141,15 @@ export const PARSE_BOM_FILE = `
         totalManufactured
         totalStandard
         wrongEntryCount
+        errorCount
+        warningCount
         duplicateDrawingCount
       }
       manufacturedParts {
-        srNo
         drawingNo
         description
-        qtyLh
-        qtyRh
+        qty
+        lhRh
         isWrongEntry
         wrongEntryReason
         fixtureSeq
@@ -142,15 +161,21 @@ export const PARSE_BOM_FILE = `
         duplicateFixtures { id fixtureNumber }
       }
       standardParts {
-        srNo
-        partNumber
+        drawingNo
+        itemCode
         description
-        make
         qty
-        unit
-        similarProducts { id partNo name make }
+        lhRh
+        productFound
+        productId
+        isWrongEntry
+        wrongEntryReason
+        fixtureSeq
+        unitSeq
       }
-      wrongEntries { rowNum srNo rawValue reason }
+      wrongEntries { rowNum rawValue reason }
+      errors { rowNum rawValue reason }
+      warnings { drawingNo description qty note }
     }
   }
 `

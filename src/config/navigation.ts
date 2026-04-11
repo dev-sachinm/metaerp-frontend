@@ -7,12 +7,23 @@
 export interface NavItemConfig {
   /** Backend module id (e.g. core, master_data) */
   moduleId: string
-  /** Entity name for permission check; omit for non-entity links (e.g. Dashboard) */
+  /** Single entity name for permission check; omit for non-entity links (e.g. Dashboard) */
   entity?: string
+  /**
+   * Alternative entity names (OR-logic): item is visible if user has permission on
+   * `entity` OR any entry in `entityFallbacks`. Useful when different roles have
+   * permissions on related but distinct entities (e.g. Manufacturing has fixture_bom
+   * but not project).
+   */
+  entityFallbacks?: string[]
   path: string
   label: string
+  /** If set, user must have THIS specific action (not just any) on the entity */
+  requiredAction?: 'create' | 'read' | 'update' | 'delete' | 'list'
   /** Icon component or name for sidebar */
-  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project'
+  icon?: 'dashboard' | 'users' | 'roles' | 'master' | 'project' | 'email' | 'audit' | 'purchase_order' | 'superadmin_dashboard'
+  /** If set, item is only shown to users who have this role */
+  requireRole?: string
 }
 
 /** All nav items; order and visibility driven by module + permission */
@@ -22,6 +33,13 @@ export const NAV_ITEMS: NavItemConfig[] = [
     path: '/',
     label: 'Dashboard',
     icon: 'dashboard',
+  },
+  {
+    moduleId: 'core',
+    path: '/dashboard/superadmin',
+    label: 'Superadmin Dashboard',
+    icon: 'superadmin_dashboard',
+    requireRole: 'superadmin',
   },
   {
     moduleId: 'core',
@@ -45,16 +63,34 @@ export const NAV_ITEMS: NavItemConfig[] = [
   },
   {
     moduleId: 'project_management',
-    entity: 'project',
+    // No entity check — all roles that use project_management (Manufacturing, Design, Quality,
+    // Procurement, Store) need to reach the Projects/BomTree page even if they lack project.read.
+    // Route-level access is already guarded by RequireModule('project_management').
     path: '/projects',
     label: 'Projects',
     icon: 'project',
+  },
+  {
+    moduleId: 'master_data',
+    entity: 'purchase_order',
+    path: '/purchase-orders',
+    label: 'Purchase Orders',
+    icon: 'purchase_order',
+  },
+  {
+    moduleId: 'core',
+    entity: 'audit_log',
+    requiredAction: 'delete',
+    path: '/audit-logs',
+    label: 'Audit Logs',
+    icon: 'audit',
   },
 ]
 
 /** Module IDs that own routes; use with RequireModule */
 export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/': 'core',
+  '/dashboard/superadmin': 'core',
   '/users': 'core',
   '/users/create': 'core',
   '/users/:id/access': 'core',
@@ -72,8 +108,14 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/master/expense-categories': 'master_data',
   '/master/suppliers': 'master_data',
   '/master/vendors': 'master_data',
+  '/purchase-orders': 'master_data',
+  '/purchase-orders/:id/view': 'master_data',
+  '/purchase-orders/:id/edit': 'master_data',
   '/projects': 'project_management',
   '/projects/:id/assignment': 'project_management',
+  '/emails': 'core',
+  '/emails/:id': 'core',
+  '/audit-logs': 'core',
 }
 
 /** Resolve which module guards a path (first segment match) */
@@ -83,6 +125,8 @@ export function getModuleIdForPath(pathname: string): string | null {
   if (normalized.startsWith('/users')) return 'core'
   if (normalized.startsWith('/roles')) return 'core'
   if (normalized.startsWith('/master')) return 'master_data'
+  if (normalized.startsWith('/purchase-orders')) return 'master_data'
   if (normalized.startsWith('/projects')) return 'project_management'
+  if (normalized.startsWith('/audit-logs')) return 'core'
   return null
 }

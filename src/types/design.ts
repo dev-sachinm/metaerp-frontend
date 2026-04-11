@@ -49,33 +49,53 @@ export interface Fixture extends FixtureSummary {
 // ── BOM View ─────────────────────────────────────────────────────────────────
 export interface ManufacturedPart {
   id: string
+  fixtureId: string
   drawingNo: string
   description: string
-  qtyLh?: number | null
-  qtyRh?: number | null
-  /** Optional status from backend (if provided on BomView.manufacturedParts). */
+  qty?: number | null
+  receivedQuantity?: number | null
+  lhRh?: string | null
+  unitPrice?: number | null
   status?: string | null
+  productId?: string | null
+  vendorId?: string | null
+  vendorName?: string | null
   fixtureSeq: number
   unitSeq: number
   partSeq: number
   drawingFileS3Key?: string | null
+  pendingAt?: string | null
+  inprogressAt?: string | null
+  qualityCheckedAt?: string | null
+  receivedAt?: string | null
+  collectedByassemblyQuantity?: number | null
+  collectedByUserId?: string | null
+  collectedAt?: string | null
 }
 
 export interface StandardPart {
   id: string
-  srNo: string
-  qty: number
-  unitId?: string | null
+  fixtureId: string
   productId?: string | null
-  partNo?: string | null
+  unitId?: string | null
+  supplierId?: string | null
+  supplierName?: string | null
+  uom?: string | null
+  lhRh?: string | null
+  itemCode?: string | null
   productName?: string | null
   productMake?: string | null
-  /** Current stock from product model */
+  qty?: number | null
   currentStock?: number | null
-  /** Expected quantity from standard part model */
   expectedQty?: number | null
-  /** Purchase quantity = expectedQty - currentStock (0 if negative) */
   purchaseQty?: number | null
+  purchaseUnitPrice?: number | null
+  fixtureSeq?: number | null
+  unitSeq?: number | null
+  partSeq?: number | null
+  collectedByassemblyQuantity?: number | null
+  collectedByUserId?: string | null
+  collectedAt?: string | null
 }
 
 export interface BomViewFixture {
@@ -98,12 +118,19 @@ export interface DrawingViewUrl {
 }
 
 // ── BOM Parse (Step 2) ────────────────────────────────────────────────────────
+export type BomChangeStatus = 'changed' | 'unchanged' | 'new' | null
+
+export interface BomChangeEntry {
+  field: string       // "description" | "quantity" | "lhRh" | "drawingFile"
+  oldValue: string | null   // current DB value
+  newValue: string | null   // parsed BOM value
+}
+
 export interface ParsedManufacturedPart {
-  srNo: string
   drawingNo: string
   description: string
-  qtyLh?: number | null
-  qtyRh?: number | null
+  qty?: number | null
+  lhRh?: string | null
   isWrongEntry: boolean
   wrongEntryReason?: string | null
   fixtureSeq?: number | null
@@ -112,44 +139,69 @@ export interface ParsedManufacturedPart {
   parsedDrawingNo?: string | null
   hasDrawing: boolean
   isDuplicateInProject?: boolean
-  duplicateFixtures?: { id: string; fixtureNumber: string }[]
-  /** true if the fixture (by fixtureSeq) already exists in the project */
+  duplicateFixtures?: { id: string; fixtureNumber: string; qty?: number | null }[]
   fixtureExists?: boolean
   existingFixtureId?: string | null
   existingFixtureNumber?: string | null
-}
-
-export interface SimilarProduct {
-  id: string
-  partNo?: string | null
-  name: string
-  make?: string | null
+  // Re-upload diff fields
+  changeStatus?: BomChangeStatus
+  changes?: BomChangeEntry[]
+  existingStatus?: string | null
+  existingRowId?: string | null
+  drawingFileChanged?: boolean
 }
 
 export interface ParsedStandardPart {
-  srNo: string
-  partNumber: string
+  drawingNo: string
+  itemCode: string
   description: string
-  make?: string | null
   qty: number
-  unit?: string | null
-  similarProducts: SimilarProduct[]
+  lhRh?: string | null
+  productFound: boolean
+  productId?: string | null
+  isWrongEntry: boolean
+  wrongEntryReason?: string | null
+  fixtureSeq?: number | null
+  unitSeq?: number | null
+  // Re-upload diff fields
+  changeStatus?: BomChangeStatus
+  changes?: BomChangeEntry[]
+  existingRowId?: string | null
 }
 
 export interface WrongEntry {
   rowNum: number
-  srNo?: string | null
   rawValue?: string | null
   reason: string
+}
+
+export interface BomParseError {
+  rowNum: number
+  rawValue?: string | null
+  reason: string
+}
+
+export interface BomParseWarning {
+  drawingNo: string
+  description?: string | null
+  qty?: number | null
+  note: string
 }
 
 export interface ParseBomSummary {
   totalManufactured: number
   totalStandard: number
   wrongEntryCount: number
+  errorCount?: number
+  warningCount?: number
   duplicateDrawingCount?: number
   newFixtureSeqs?: number[]
   existingFixtureSeqs?: number[]
+  // Re-upload summary
+  changedCount?: number
+  unchangedCount?: number
+  newCount?: number
+  notUpdatableCount?: number
 }
 
 export interface ParsedBom {
@@ -157,6 +209,8 @@ export interface ParsedBom {
   manufacturedParts: ParsedManufacturedPart[]
   standardParts: ParsedStandardPart[]
   wrongEntries: WrongEntry[]
+  errors?: BomParseError[]
+  warnings?: BomParseWarning[]
 }
 
 // ── Upload wizard resolution types ────────────────────────────────────────────
@@ -167,9 +221,14 @@ export interface WrongEntryResolution {
 }
 
 export interface ProductMatchResolution {
-  partNumber: string
+  itemCode: string
   /** Empty string means no product matched — backend stores the part without a product link */
   productId: string
+}
+
+export interface QuantityCorrection {
+  drawingNo: string
+  qty: number
 }
 
 // ── Upload URL response ───────────────────────────────────────────────────────

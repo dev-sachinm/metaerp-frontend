@@ -27,36 +27,19 @@ import type {
   FixtureSummary,
   ParsedBom,
   ProductMatchResolution,
+  QuantityCorrection,
   SubmitBomResult,
   WrongEntryResolution,
 } from '@/types/design'
 import type { PaginatedList } from '@/types/projectManagement'
 
 // ── Query Keys ────────────────────────────────────────────────────────────────
-export interface BomViewFilters {
-  drawingNo?: string
-  drawingDesc?: string
-  stdPartNo?: string
-  stdName?: string
-  stdMake?: string
-}
-
 export const designKeys = {
   all: ['design'] as const,
-  fixtures: (projectId: string, status?: string) =>
-    [...designKeys.all, 'fixtures', projectId, status ?? 'all'] as const,
+  fixtures: (projectId: string, status?: string, isActive?: boolean) =>
+    [...designKeys.all, 'fixtures', projectId, status ?? 'all', isActive ?? 'all'] as const,
   fixture: (id: string) => [...designKeys.all, 'fixture', id] as const,
-  bomView: (fixtureId: string, filters?: BomViewFilters) =>
-    [
-      ...designKeys.all,
-      'bomView',
-      fixtureId,
-      filters?.drawingNo ?? '',
-      filters?.drawingDesc ?? '',
-      filters?.stdPartNo ?? '',
-      filters?.stdName ?? '',
-      filters?.stdMake ?? '',
-    ] as const,
+  bomView: (fixtureId: string) => [...designKeys.all, 'bomView', fixtureId] as const,
 }
 
 // ── Input interfaces ──────────────────────────────────────────────────────────
@@ -77,18 +60,20 @@ export interface BomSubmitInput {
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
   productMatchResolutions: ProductMatchResolution[]
+  quantityCorrections?: QuantityCorrection[]
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-export function useFixtures(projectId: string | null, status?: string) {
+export function useFixtures(projectId: string | null, status?: string, isActive?: boolean) {
   return useQuery({
-    queryKey: designKeys.fixtures(projectId ?? '', status),
+    queryKey: designKeys.fixtures(projectId ?? '', status, isActive),
     queryFn: () =>
       executeGraphQL<{ fixtures: PaginatedList<FixtureSummary> }>(GET_FIXTURES, {
         projectId: projectId!,
         skip: 0,
         limit: 100,
         status,
+        isActive,
       }),
     enabled: !!projectId,
     staleTime: 15 * 1000,
@@ -104,22 +89,10 @@ export function useFixture(id: string | null) {
   })
 }
 
-export function useBomView(
-  fixtureId: string | null,
-  enabled = true,
-  filters?: BomViewFilters
-) {
+export function useBomView(fixtureId: string | null, enabled = true) {
   return useQuery({
-    queryKey: designKeys.bomView(fixtureId ?? '', filters),
-    queryFn: () =>
-      executeGraphQL<{ bomView: BomView | null }>(GET_BOM_VIEW, {
-        fixtureId: fixtureId!,
-        drawingNo: filters?.drawingNo || undefined,
-        drawingDesc: filters?.drawingDesc || undefined,
-        stdPartNo: filters?.stdPartNo || undefined,
-        stdName: filters?.stdName || undefined,
-        stdMake: filters?.stdMake || undefined,
-      }),
+    queryKey: designKeys.bomView(fixtureId ?? ''),
+    queryFn: () => executeGraphQL<{ bomView: BomView | null }>(GET_BOM_VIEW, { fixtureId: fixtureId! }),
     enabled: !!fixtureId && enabled,
     staleTime: 30 * 1000,
   })
@@ -230,7 +203,8 @@ export interface ProjectBomSubmitInput {
   s3Key: string
   filename: string
   wrongEntryResolutions: WrongEntryResolution[]
-  productMatchResolutions: ProductMatchResolution[]
+  productMatchResolutions?: ProductMatchResolution[]
+  quantityCorrections?: QuantityCorrection[]
 }
 
 export function useSubmitProjectBomUpload(projectId: string) {

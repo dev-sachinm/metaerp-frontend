@@ -11,7 +11,7 @@ const PT_FIELDS = 'id name code days isActive'
 const EC_FIELDS = 'id name parentId code isActive'
 const SUP_FIELDS = 'id name code contactPerson email phone address isActive'
 const VEND_FIELDS = 'id name code contactPerson email phone address isActive'
-const PROD_FIELDS = 'id name categoryId partNo description make unitId unitName quantity isActive'
+const PROD_FIELDS = 'id itemCode name description make puUnitId stkUnitId puUnitName stkUnitName procMtd locationInStore quantity isActive categoryId'
 
 export const CREATE_PRODUCT_CATEGORY = `
   mutation CreateProductCategory($input: ProductCategoryInput!) {

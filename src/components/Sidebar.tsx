@@ -65,7 +65,7 @@ function NavItem({ to, icon, label, isCollapsed, badge }: NavItemProps) {
 }
 
 /** Icon components for nav config */
-const NAV_ICONS: Record<NavItemConfig['icon'] | undefined, React.ReactNode> = {
+const NAV_ICONS: Record<NonNullable<NavItemConfig['icon']>, React.ReactNode> = {
   dashboard: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -89,6 +89,26 @@ const NAV_ICONS: Record<NavItemConfig['icon'] | undefined, React.ReactNode> = {
   project: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2zm2 8h8m-8 4h5" />
+    </svg>
+  ),
+  purchase_order: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
+  email: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
+    </svg>
+  ),
+  audit: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>
+  ),
+  superadmin_dashboard: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
     </svg>
   ),
 }
@@ -116,21 +136,39 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
   // Show menu item only if: (1) its module is enabled, (2) if it has an entity,
   // the user has any permission on that entity. Uses smart key resolution so
   // 'user'/'users', 'project'/'projects' etc. all match regardless of backend convention.
+  // entityFallbacks provides OR-logic: item shows if user has access to entity OR any fallback.
   const visibleNavItems = useMemo(() => {
+    const hasAnyPermission = (entityName: string): boolean => {
+      if (!permissions?.entities) return false
+      const key = resolvePermissionEntityKey(entityName, permissions.entities)
+      const p = permissions.entities[key]
+      if (!p) return false
+      return p.create === true || p.read === true || p.update === true || p.delete === true || p.list === true
+    }
+
     return NAV_ITEMS.filter((item) => {
       if (!enabledModuleIds.includes(item.moduleId)) return false
+      if (item.requireRole && !user?.roles.includes(item.requireRole)) return false
       if (item.entity != null) {
         if (!permissions?.entities) return false
         const key = resolvePermissionEntityKey(item.entity, permissions.entities)
         const entityPerms = permissions.entities[key]
-        if (!entityPerms) return false
-        return (
-          entityPerms.create === true ||
-          entityPerms.read === true ||
-          entityPerms.update === true ||
-          entityPerms.delete === true ||
-          entityPerms.list === true
-        )
+        if (entityPerms) {
+          // If a specific action is required, check only that action
+          if (item.requiredAction) return entityPerms[item.requiredAction] === true
+          if (
+            entityPerms.create === true ||
+            entityPerms.read === true ||
+            entityPerms.update === true ||
+            entityPerms.delete === true ||
+            entityPerms.list === true
+          ) return true
+        }
+        // Fall through to entityFallbacks check
+        if (item.entityFallbacks?.length) {
+          return item.entityFallbacks.some((fb) => hasAnyPermission(fb))
+        }
+        return false
       }
       return true
     })
@@ -227,7 +265,7 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           <NavItem
             key={item.path}
             to={item.path}
-            icon={NAV_ICONS[item.icon]}
+            icon={item.icon ? NAV_ICONS[item.icon] : null}
             label={item.label}
             isCollapsed={isCollapsed}
           />
@@ -311,7 +349,8 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
         </button>
       </div>
 
-      {/* DEV-ONLY: Permission debug panel — remove before production */}
+      {/* DEV-ONLY: Permission debug panel — removed from UI */}
+      {/* 
       {isDev && !isCollapsed && (
         <div className="mx-2 mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] leading-4 text-amber-900 overflow-auto max-h-56">
           <p className="font-bold mb-1">🔍 Debug (dev only)</p>
@@ -344,6 +383,7 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           <p className="break-all">{visibleNavItems.map(i => i.label).join(', ') || '(none)'}</p>
         </div>
       )}
+      */}
 
       {/* Animated gradient accent */}
       <div className="absolute top-0 right-0 w-0.5 h-full bg-gradient-to-b from-indigo-600 via-blue-600 to-indigo-600 opacity-50" />

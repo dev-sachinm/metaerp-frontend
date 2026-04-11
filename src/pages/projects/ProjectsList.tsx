@@ -5,12 +5,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Loader } from '@/components/Loader'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useProjects, useDeleteProject } from '@/hooks/graphql/useProjectAssignments'
 import { useFixtures } from '@/hooks/graphql/useDesign'
-import { useMyPermissions } from '@/hooks/graphql/usePermissionsQuery'
-import { getAssignmentPermissionsFromByRole } from '@/lib/assignmentPermissions'
+import { useExportBomViewExcelItemCode } from '@/hooks/graphql/useDesignItemCodeExport'
 import { getErrorMessage } from '@/lib/graphqlErrors'
 import { useEntityActions, useUIPermission } from '@/hooks/usePermissions'
 import { BomTree } from './fixtures/BomTree'
@@ -19,6 +19,7 @@ import { CreateProjectModal } from './CreateProjectModal'
 import {
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   FolderClosed,
   FolderOpen,
   Plus,
@@ -28,6 +29,9 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  Download,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import type { ProjectSummary } from '@/types/projectManagement'
 
@@ -78,9 +82,12 @@ function ProjectNode({ project, canRead, canUpdate, canDelete, canAssign }: Proj
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showProjectBomUpload, setShowProjectBomUpload] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [exportFixtureId, setExportFixtureId] = useState<string>('')
   const canUploadBom = useUIPermission('UPLOAD_BOM')
 
   const deleteProject = useDeleteProject()
+  const exportBomViewExcel = useExportBomViewExcelItemCode()
 
   // Fixtures for this project (for tree + counts only)
   const { data, isLoading, refetch } = useFixtures(project.id)
@@ -137,6 +144,17 @@ function ProjectNode({ project, canRead, canUpdate, canDelete, canAssign }: Proj
 
           {/* Action buttons — stop click propagating to expand */}
           <div className="ml-auto flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs gap-1"
+              onClick={() => {
+                if (!exportFixtureId && fixtures[0]?.id) setExportFixtureId(fixtures[0].id)
+                setShowExportDialog(true)
+              }}
+            >
+              <Download className="h-3 w-3" /> Export Excel
+            </Button>
             {canRead && (
               <Button
                 size="sm"
@@ -250,6 +268,56 @@ function ProjectNode({ project, canRead, canUpdate, canDelete, canAssign }: Proj
       </div>
 
       {/* Modals */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Export BOM View Excel</DialogTitle>
+            <DialogDescription>
+              Exports the current fixture BOM view into an Excel with two sheets: Manufactured Parts and Standard Parts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-600">Fixture</label>
+            <select
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+              value={exportFixtureId}
+              onChange={(e) => setExportFixtureId(e.target.value)}
+            >
+              <option value="" disabled>Select fixture…</option>
+              {fixtures.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.fixtureNumber}
+                </option>
+              ))}
+            </select>
+            {fixtures.length === 0 && (
+              <p className="text-xs text-slate-500">No fixtures available yet.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!exportFixtureId || exportBomViewExcel.isPending}
+              onClick={async () => {
+                try {
+                  const res = await exportBomViewExcel.mutateAsync({ fixtureId: exportFixtureId })
+                  const url = res.exportBomViewExcel.downloadUrl
+                  window.open(url, '_blank', 'noopener,noreferrer')
+                  setShowExportDialog(false)
+                } catch {
+                  // toast handled in hook
+                }
+              }}
+            >
+              {exportBomViewExcel.isPending ? 'Exporting…' : 'Download'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {showProjectBomUpload && (
         <BomUploadWizard
           projectId={project.id}
@@ -278,12 +346,8 @@ export function ProjectsList() {
     undefined
   )
 
-  const { data: myPermsData } = useMyPermissions()
-  const assignmentPerms = useMemo(
-    () => getAssignmentPermissionsFromByRole(myPermsData?.myPermissions?.byRole),
-    [myPermsData]
-  )
   const { canRead, canUpdate } = useEntityActions('project')
+  const canAssign = useUIPermission('ASSIGN_PROJECT')
 
   const list = data?.projects
   const rawItems = list?.items ?? []
@@ -380,7 +444,7 @@ export function ProjectsList() {
                 canRead={canRead}
                 canUpdate={canUpdate}
                 canDelete={canDelete}
-                canAssign={assignmentPerms.canOpenAssignmentScreen}
+                canAssign={canAssign}
               />
             ))}
           </div>
@@ -392,12 +456,20 @@ export function ProjectsList() {
             <span className="text-sm text-slate-500">
               Page {page + 1} of {totalPages} · {total} total
             </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 0}>
-                Previous
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={() => setPage(0)} disabled={page <= 0} title="First page">
+                <ChevronsLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1}>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 0} title="Previous page">
+                <ChevronLeft className="h-4 w-4" />
+                Prev
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1} title="Next page">
                 Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} title="Last page">
+                <ChevronsRight className="h-4 w-4" />
               </Button>
             </div>
           </div>

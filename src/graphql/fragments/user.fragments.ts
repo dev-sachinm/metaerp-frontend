@@ -19,7 +19,7 @@ export const UserFieldsFragment = `
     username
     email
     isActive
-    roles
+    roles { id name }
   }
 `;
 
@@ -37,7 +37,7 @@ export const UserDetailFragment = `
     username
     email
     isActive
-    roles
+    roles { id name }
   }
 `;
 

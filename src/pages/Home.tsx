@@ -3,13 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { PermissionGuard } from '@/components/PermissionGuard'
 import { useCurrentUser, usePermissions } from '@/stores/authStore'
-import { useEntityActions, useCanAccess } from '@/hooks/usePermissions'
+import { useEntityActions, useUIPermission } from '@/hooks/usePermissions'
+import { AuditLogWidget } from '@/components/AuditLogWidget'
 import { DashboardLayout } from '@/layouts/DashboardLayout'
 
 export default function Home() {
   const user = useCurrentUser()
   const permissions = usePermissions()
-  const { canCreate: canCreateUser, canUpdate: canUpdateUser, canDelete: canDeleteUser, canList: canListUser } = useEntityActions('user')
+  const { canCreate: canCreateUser, canRead: canReadUser, canUpdate: canUpdateUser, canDelete: canDeleteUser, canList: canListUser } = useEntityActions('user')
+  const canSeeAuditWidget = useUIPermission('AUDIT_LOGS_WIDGET')
 
   return (
     <DashboardLayout>
@@ -23,6 +25,17 @@ export default function Home() {
             You're successfully authenticated and authorized!
           </p>
         </div>
+
+        {/* Audit Log Widget — only for users with audit_log.read */}
+        {canSeeAuditWidget && (
+          <div className="mb-8 max-w-2xl">
+            <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
+              <span className="inline-block w-1 h-5 rounded bg-indigo-500" />
+              Recent System Activity
+            </h2>
+            <AuditLogWidget />
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-6 max-w-4xl">
           {/* User Info Card */}
@@ -77,8 +90,8 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span>Read</span>
-                    <Badge variant={useCanAccess('user', 'read') ? 'success' : 'outline'}>
-                      {useCanAccess('user', 'read') ? '✓' : '✗'}
+                    <Badge variant={canReadUser ? 'success' : 'outline'}>
+                      {canReadUser ? '✓' : '✗'}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
@@ -219,6 +232,7 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
+
       </div>
     </DashboardLayout>
   )

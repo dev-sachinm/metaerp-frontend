@@ -32,8 +32,6 @@ interface AssignPrincipalFormProps {
   setError: (message: string | null) => void
 }
 
-const ACCESS_LEVELS: AccessLevel[] = ['viewer', 'editor', 'owner']
-
 export function AssignPrincipalForm({
   projectId,
   assignments,
@@ -48,10 +46,7 @@ export function AssignPrincipalForm({
 }: AssignPrincipalFormProps) {
   const [principalType, setPrincipalType] = useState<PrincipalType>('user')
   const [principalId, setPrincipalId] = useState('')
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>('viewer')
-
   const [bulkPrincipalType, setBulkPrincipalType] = useState<PrincipalType>('user')
-  const [bulkAccessLevel, setBulkAccessLevel] = useState<AccessLevel>('viewer')
   const [bulkSelection, setBulkSelection] = useState<string[]>([])
 
   const principalOptions = principalType === 'user' ? assignableUsers : assignableRoles
@@ -82,7 +77,7 @@ export function AssignPrincipalForm({
       return
     }
 
-    await onAssign({ projectId, principalType, principalId, accessLevel })
+    await onAssign({ projectId, principalType, principalId, accessLevel: 'viewer' })
     setPrincipalId('')
   }
 
@@ -105,7 +100,7 @@ export function AssignPrincipalForm({
         projectId,
         principalType: bulkPrincipalType,
         principalId: principalIdItem,
-        accessLevel: bulkAccessLevel,
+        accessLevel: 'viewer' as AccessLevel,
       }))
 
     if (payloads.length === 0) {
@@ -123,7 +118,7 @@ export function AssignPrincipalForm({
         <CardHeader>
           <CardTitle className="text-base">Assign Principal</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardContent className="grid gap-3 md:grid-cols-3">
           <select
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             value={principalType}
@@ -144,27 +139,21 @@ export function AssignPrincipalForm({
             disabled={!canAssign}
           >
             <option value="">Select {principalType}</option>
-            {principalOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {principalType === 'user'
-                  ? (p as AssignableUser).email ||
-                    (p as AssignableUser).username ||
-                    [(p as AssignableUser).firstName, (p as AssignableUser).lastName].filter(Boolean).join(' ') ||
-                    p.id
-                  : (p as AssignableRole).name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={accessLevel}
-            onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
-            disabled={!canAssign}
-          >
-            {ACCESS_LEVELS.map((level) => (
-              <option key={level} value={level}>{level}</option>
-            ))}
+            {principalOptions.map((p) => {
+              let label = ''
+              if (principalType === 'user') {
+                const u = p as AssignableUser
+                const name = [u.firstName, u.lastName].filter(Boolean).join(' ')
+                label = name && u.email ? `${name} (${u.email})` : name || u.email || u.username || u.id
+              } else {
+                label = (p as AssignableRole).name
+              }
+              return (
+                <option key={p.id} value={p.id}>
+                  {label}
+                </option>
+              )
+            })}
           </select>
 
           <Button onClick={submitSingle} disabled={!canAssign || isAssignPending}>
@@ -178,7 +167,7 @@ export function AssignPrincipalForm({
           <CardTitle className="text-base">Bulk Assign</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <select
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={bulkPrincipalType}
@@ -191,16 +180,6 @@ export function AssignPrincipalForm({
               <option value="user">User</option>
               <option value="role">Role</option>
             </select>
-            <select
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={bulkAccessLevel}
-              onChange={(e) => setBulkAccessLevel(e.target.value as AccessLevel)}
-              disabled={!canBulkAssign}
-            >
-              {ACCESS_LEVELS.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
             <Button onClick={submitBulk} disabled={!canBulkAssign || isAssignPending}>
               {isAssignPending ? 'Applying…' : 'Assign Selected'}
             </Button>
@@ -209,13 +188,14 @@ export function AssignPrincipalForm({
           <div className="max-h-48 overflow-auto rounded-md border border-slate-200 p-2 space-y-2">
             {bulkOptions.map((p) => {
               const id = p.id
-              const label =
-                bulkPrincipalType === 'user'
-                  ? (p as AssignableUser).email ||
-                    (p as AssignableUser).username ||
-                    [(p as AssignableUser).firstName, (p as AssignableUser).lastName].filter(Boolean).join(' ') ||
-                    p.id
-                  : (p as AssignableRole).name
+              let label = ''
+              if (bulkPrincipalType === 'user') {
+                const u = p as AssignableUser
+                const name = [u.firstName, u.lastName].filter(Boolean).join(' ')
+                label = name && u.email ? `${name} (${u.email})` : name || u.email || u.username || u.id
+              } else {
+                label = (p as AssignableRole).name
+              }
               return (
                 <label key={id} className="flex items-center gap-2 text-sm">
                   <input

@@ -37,7 +37,7 @@ const ENTITY = 'project'
 const LIST_PATH = '/projects'
 
 function CustomerDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data, isLoading } = useCustomers(0, 500, true)
+  const { data, isLoading } = useCustomers(1, 500, { isActive: true })
   const customers = data?.customers?.items ?? []
   return (
     <select

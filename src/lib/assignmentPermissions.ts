@@ -19,7 +19,7 @@ export function getAssignmentPermissionsFromByRole(
   if (byRole && typeof byRole === 'object') {
     for (const rolePerms of Object.values(byRole)) {
       if (!rolePerms || typeof rolePerms !== 'object') continue
-      const pa = rolePerms.project_assignments
+      const pa = (rolePerms as any).project_assignment
       if (pa?.update === true) {
         canUpdateProjectAssignment = true
         break

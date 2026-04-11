@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import { Loader } from '@/components/Loader'
 import {
   CheckCircle2,
@@ -18,15 +17,15 @@ import {
 } from 'lucide-react'
 import {
   fetchProjectBomUploadUrl,
-  fetchParseProjectBomFile,
   useSubmitProjectBomUpload,
 } from '@/hooks/graphql/useDesign'
+import { fetchParseProjectBomFile } from '@/hooks/graphql/useDesignItemCode'
 import type {
   ParsedBom,
   ParsedManufacturedPart,
   ParsedStandardPart,
   WrongEntryResolution,
-  ProductMatchResolution,
+  BomParseWarning,
 } from '@/types/design'
 
 function StepDots({ current, total }: { current: number; total: number }) {
@@ -48,7 +47,7 @@ function StepDots({ current, total }: { current: number; total: number }) {
           >
             {i + 1}
           </span>
-          {['Pick File', 'Review', 'Confirm'][i]}
+          {['Pick File', 'Review & Confirm'][i]}
           {i < total - 1 && <ChevronRight className="h-3 w-3 text-slate-300" />}
         </span>
       ))}
@@ -174,27 +173,40 @@ function Step1Upload({ projectId, onDone }: Step1Props) {
 interface Step2Props {
   projectId: string
   s3Key: string
-  onDone: (wr: WrongEntryResolution[], pm: ProductMatchResolution[]) => void
+  filename: string
+  onSuccess: () => void
   onBack: () => void
 }
 
-function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
+function Step2Review({ projectId, s3Key, filename, onSuccess, onBack }: Step2Props) {
   const [parsed, setParsed] = useState<ParsedBom | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
   const [wrongResolutions, setWrongResolutions] = useState<Record<string, WrongEntryResolution>>({})
-  const [productMatches, setProductMatches] = useState<Record<string, string>>({})
+  const submit = useSubmitProjectBomUpload(projectId)
 
-  // Fetch on mount
-  useState(() => {
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
     fetchParseProjectBomFile(projectId, s3Key)
-      .then((b) => { setParsed(b); setLoading(false) })
-      .catch((e: unknown) => {
-        setLoadError(e instanceof Error ? e.message : 'Failed to parse BOM')
-        setLoading(false)
+      .then((b) => {
+        if (!cancelled) {
+          setParsed(b)
+          setLoading(false)
+        }
       })
-  })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : 'Failed to parse BOM')
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, s3Key])
 
   const wrongEntryDrawings = (parsed?.manufacturedParts ?? []).filter((p) => p.isWrongEntry).map((p) => p.drawingNo)
   const unresolvedCount = wrongEntryDrawings.filter((d) => {
@@ -204,18 +216,9 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
     if (r.action === 'override' && r.correctedDrawingNo) return false
     return true
   }).length
-  const canProceed = unresolvedCount === 0
-
-  const handleNext = () => {
-    const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
-    // Send ALL standard parts — include user-selected productId where available,
-    // empty string for unmatched (backend will store the part without a product link).
-    const pm: ProductMatchResolution[] = standardParts.map((p) => ({
-      partNumber: p.partNumber,
-      productId: productMatches[p.partNumber] ?? '',
-    }))
-    onDone(wr, pm)
-  }
+  const wrongStandardParts = (parsed?.standardParts ?? []).filter((p) => p.isWrongEntry).length
+  const parseErrors = parsed?.errors ?? []
+  const canProceed = unresolvedCount === 0 && wrongStandardParts === 0 && parseErrors.length === 0
 
   if (loading) {
     return (
@@ -237,30 +240,84 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
     )
   }
 
-  const { summary, manufacturedParts, standardParts, wrongEntries } = parsed
+  const { summary, manufacturedParts, standardParts, wrongEntries, warnings = [] } = parsed
+  const errors = parseErrors
+
+  // Detect re-upload: any part has a non-null changeStatus
+  const isReUpload = manufacturedParts.some(p => p.changeStatus != null) ||
+    standardParts.some(p => p.changeStatus != null)
+
+  const handleSubmit = async () => {
+    const wr: WrongEntryResolution[] = Object.values(wrongResolutions)
+    await submit.mutateAsync({
+      projectId,
+      s3Key,
+      filename,
+      wrongEntryResolutions: wr,
+    })
+    onSuccess()
+  }
+
   const duplicateCount = summary.duplicateDrawingCount ?? 0
   const newFixtures = summary.newFixtureSeqs ?? []
-  const existingFixtures = summary.existingFixtureSeqs ?? []
+
+  const validPartFixtureSeqs = new Set(
+    manufacturedParts.filter(p => !p.isWrongEntry).map(p => p.fixtureSeq).filter(Boolean)
+  )
+  const existingFixtures = (summary.existingFixtureSeqs ?? []).filter(
+    seq => validPartFixtureSeqs.has(seq)
+  )
 
   return (
     <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-3 text-center">
-        {[
-          { label: 'Manufactured', value: summary.totalManufactured, color: 'text-indigo-600' },
-          { label: 'Standard', value: summary.totalStandard, color: 'text-teal-600' },
-          { label: 'Wrong Entries', value: summary.wrongEntryCount, color: 'text-red-600' },
-          { label: 'Duplicates (skip)', value: duplicateCount, color: 'text-amber-600' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 py-3">
-            <p className={`text-xl font-bold ${color}`}>{value}</p>
-            <p className="text-xs text-slate-500">{label}</p>
-          </div>
-        ))}
-      </div>
+      {isReUpload ? (
+        <div className="grid grid-cols-3 gap-3 text-center">
+          {[
+            { label: 'Changed', value: summary.changedCount ?? 0, color: 'text-amber-600' },
+            { label: 'Unchanged', value: summary.unchangedCount ?? 0, color: 'text-slate-500' },
+            { label: 'Not Updatable', value: summary.notUpdatableCount ?? 0, color: 'text-red-500' },
+            { label: 'Wrong Entries', value: summary.wrongEntryCount, color: 'text-red-600' },
+            { label: 'Errors', value: summary.errorCount ?? 0, color: 'text-red-700' },
+            { label: 'PDF-only (not in Excel)', value: summary.warningCount ?? 0, color: 'text-amber-700' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 py-3">
+              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className="text-xs text-slate-500">{label}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 text-center">
+          {[
+            { label: 'Manufactured', value: summary.totalManufactured, color: 'text-indigo-600' },
+            { label: 'Standard', value: summary.totalStandard, color: 'text-teal-600' },
+            { label: 'Wrong Entries', value: summary.wrongEntryCount, color: 'text-red-600' },
+            { label: 'Duplicates (skip)', value: duplicateCount, color: 'text-amber-600' },
+            { label: 'Errors', value: summary.errorCount ?? 0, color: 'text-red-700' },
+            { label: 'PDF-only (not in Excel)', value: summary.warningCount ?? 0, color: 'text-amber-700' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 py-3">
+              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className="text-xs text-slate-500">{label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Fixture info */}
-      {(newFixtures.length > 0 || existingFixtures.length > 0) && (
+      {/* Re-upload info banner */}
+      {isReUpload && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-1">
+          <p className="font-semibold">Re-upload detected — existing BOM will be updated in place.</p>
+          <p>Rows where the quantity differs between the database and the new BOM file are highlighted.</p>
+          {(summary.notUpdatableCount ?? 0) > 0 && (
+            <p className="text-red-700 font-medium">⚠ {summary.notUpdatableCount} part{(summary.notUpdatableCount ?? 0) > 1 ? 's' : ''} cannot be updated (status is not pending).</p>
+          )}
+        </div>
+      )}
+
+      {/* First-upload fixture info */}
+      {!isReUpload && (newFixtures.length > 0 || existingFixtures.length > 0) && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 space-y-1">
           {newFixtures.length > 0 && (
             <p>New fixtures to create: <span className="font-semibold text-indigo-600">{newFixtures.join(', ')}</span></p>
@@ -271,7 +328,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
         </div>
       )}
 
-      {duplicateCount > 0 && (
+      {!isReUpload && duplicateCount > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
           <Copy className="h-4 w-4" />
           {duplicateCount} drawing{duplicateCount > 1 ? 's' : ''} already exist in this project and will be skipped automatically.
@@ -286,70 +343,109 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
           </h4>
           <div className="rounded-lg border border-slate-200 divide-y text-sm">
             {manufacturedParts.map((p: ParsedManufacturedPart, i) => {
-              const isDupe = p.isDuplicateInProject
+              const isDupe = !isReUpload && p.isDuplicateInProject
               const dupeFixtures = p.duplicateFixtures ?? []
               const dupeInfo =
                 isDupe && dupeFixtures.length > 0
                   ? `Duplicate — already in: ${dupeFixtures.map((f) => f.fixtureNumber).join(', ')}`
-                  : isDupe
-                  ? 'Duplicate — will be skipped'
-                  : null
+                  : isDupe ? 'Duplicate — will be skipped' : null
               const resolution = wrongResolutions[p.drawingNo]
               const isSkipped = p.isWrongEntry && resolution?.action === 'skip'
               const isOverridden = p.isWrongEntry && resolution?.action === 'override' && !!resolution.correctedDrawingNo
+              const isChanged = p.changeStatus === 'changed'
+              const isNotUpdatable = isChanged && p.existingStatus && p.existingStatus !== 'pending'
+              const descChange = p.changes?.find(c => c.field === 'description')
 
               let rowBg = ''
-              if (isDupe) {
-                rowBg = 'bg-slate-50 opacity-60'
-              } else if (isSkipped) {
-                rowBg = 'bg-orange-50 border-l-4 border-l-orange-400'
-              } else if (p.isWrongEntry) {
-                rowBg = 'bg-red-50'
-              } else if (!p.hasDrawing) {
-                rowBg = 'bg-amber-50'
-              }
+              if (isDupe) rowBg = 'bg-slate-50 opacity-60'
+              else if (isSkipped) rowBg = 'bg-orange-50 border-l-4 border-l-orange-400'
+              else if (p.isWrongEntry) rowBg = 'bg-red-50'
+              else if (isChanged) rowBg = 'bg-amber-50 border-l-4 border-l-amber-400'
+              else if (!p.hasDrawing) rowBg = 'bg-amber-50'
 
               let icon: React.ReactNode
-              if (isDupe) {
-                icon = <Copy className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-              } else if (isSkipped) {
-                icon = <XCircle className="h-4 w-4 text-orange-500 mt-0.5 shrink-0" />
-              } else if (p.isWrongEntry) {
-                icon = <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              } else if (!p.hasDrawing) {
-                icon = <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-              } else {
-                icon = <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-              }
+              if (isDupe) icon = <Copy className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+              else if (isSkipped) icon = <XCircle className="h-4 w-4 text-orange-500 mt-0.5 shrink-0" />
+              else if (p.isWrongEntry) icon = <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              else if (isChanged) icon = <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              else if (!p.hasDrawing) icon = <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              else icon = <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
 
               return (
               <div key={i} className={`flex items-start gap-2 px-3 py-2 ${rowBg}`}>
                 {icon}
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-xs text-slate-500">{p.drawingNo}</span>
-                  {' '}
-                  <span className={`text-slate-800 ${isDupe || isSkipped ? 'line-through opacity-60' : ''}`}>{p.description}</span>
-                  {isDupe && (
-                    <span className="ml-2 text-xs font-semibold text-slate-500 bg-slate-200 rounded px-1.5 py-0.5">DUPLICATE — SKIP</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs text-slate-500">{p.drawingNo}</span>
+                    <span className={`text-slate-800 ${isDupe || isSkipped ? 'line-through opacity-60' : ''}`}>{p.description}</span>
+                    {isChanged && <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">CHANGED</span>}
+                    {isDupe && <span className="text-xs font-semibold text-slate-500 bg-slate-200 rounded px-1.5 py-0.5">DUPLICATE — SKIP</span>}
+                    {isSkipped && !isDupe && <span className="text-xs font-semibold text-orange-600 bg-orange-100 rounded px-1.5 py-0.5">SKIPPED</span>}
+                    {isOverridden && !isDupe && <span className="text-xs font-semibold text-indigo-600 bg-indigo-100 rounded px-1.5 py-0.5">→ {resolution.correctedDrawingNo}</span>}
+                    {p.fixtureSeq != null && !isDupe && (
+                      <span className="text-xs text-slate-400">
+                        F-{String(p.fixtureSeq).padStart(3, '0')}{p.fixtureExists ? '' : ' (new)'}
+                      </span>
+                    )}
+                    {p.drawingFileChanged && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
+                        📄 Drawing updated
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description change diff */}
+                  {descChange && (
+                    <p className="text-xs mt-1 text-slate-600">
+                      Description: <span className="line-through text-red-500">{descChange.oldValue}</span>
+                      {' → '}
+                      <span className="text-green-700">{descChange.newValue}</span>
+                    </p>
                   )}
-                  {isSkipped && !isDupe && (
-                    <span className="ml-2 text-xs font-semibold text-orange-600 bg-orange-100 rounded px-1.5 py-0.5">SKIPPED</span>
+
+                  {/* Qty — read-only: show DB vs BOM for manufactured parts */}
+                  {!isSkipped && (() => {
+                    const dbQty = p.duplicateFixtures?.[0]?.qty ?? null
+                    const bomQty = p.qty ?? 0
+                    const hasDiff = dbQty != null && dbQty !== bomQty
+                    return (
+                      <div className={`mt-1.5 flex items-center gap-2 flex-wrap rounded px-2 py-1 -mx-1 ${hasDiff ? 'bg-amber-50 border border-amber-200' : ''}`}>
+                        {dbQty != null ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <span className="text-slate-400 font-medium">Existing:</span>
+                              <span className={`font-mono font-semibold px-1.5 py-0.5 rounded ${hasDiff ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-600'}`}>{dbQty}</span>
+                            </span>
+                            <span className="text-xs text-slate-300">→</span>
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <span className="text-slate-400 font-medium">New:</span>
+                              <span className={`font-mono font-semibold px-1.5 py-0.5 rounded ${hasDiff ? 'bg-amber-200 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{bomQty}</span>
+                            </span>
+                            {hasDiff && <span className="text-xs text-amber-700 font-semibold">⚠ qty changed</span>}
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs">
+                            <span className="text-slate-400 font-medium">Qty:</span>
+                            <span className="font-mono font-semibold text-slate-600">{bomQty}</span>
+                          </span>
+                        )}
+                        {p.lhRh && <span className="text-xs text-slate-400 ml-1">{p.lhRh}</span>}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Non-pending status warning */}
+                  {isNotUpdatable && (
+                    <p className="text-xs text-red-600 mt-1">
+                      ✗ Cannot update — part status is <span className="font-semibold">{p.existingStatus}</span>
+                    </p>
                   )}
-                  {isOverridden && !isDupe && (
-                    <span className="ml-2 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded px-1.5 py-0.5">→ {resolution.correctedDrawingNo}</span>
-                  )}
-                  {p.fixtureSeq != null && !isDupe && (
-                    <span className="ml-2 text-xs text-slate-400">
-                      F-{String(p.fixtureSeq).padStart(3, '0')}
-                      {p.fixtureExists ? '' : ' (new)'}
-                    </span>
-                  )}
+
                   {!p.hasDrawing && !p.isWrongEntry && !isDupe && (
                     <p className="text-xs text-amber-600 mt-0.5">⚠ Drawing not found in ZIP</p>
                   )}
-                  {dupeInfo && (
-                    <p className="text-xs text-slate-500 mt-0.5">{dupeInfo}</p>
-                  )}
+                  {dupeInfo && <p className="text-xs text-slate-500 mt-0.5">{dupeInfo}</p>}
+
                   {p.isWrongEntry && !isDupe && (
                     <div className="mt-1.5 space-y-1">
                       <p className="text-xs text-red-600">{p.wrongEntryReason}</p>
@@ -364,9 +460,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                             ...prev,
                             [p.drawingNo]: { originalDrawingNo: p.drawingNo, action: 'skip' },
                           }))}
-                        >
-                          Skip
-                        </button>
+                        >Skip</button>
                         <span className="text-slate-400 text-xs">or Override:</span>
                         <input
                           type="text"
@@ -375,22 +469,14 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
                           value={resolution?.action === 'override' ? resolution.correctedDrawingNo ?? '' : ''}
                           onChange={(e) => setWrongResolutions((prev) => ({
                             ...prev,
-                            [p.drawingNo]: {
-                              originalDrawingNo: p.drawingNo,
-                              action: 'override',
-                              correctedDrawingNo: e.target.value,
-                            },
+                            [p.drawingNo]: { originalDrawingNo: p.drawingNo, action: 'override', correctedDrawingNo: e.target.value },
                           }))}
                         />
                       </div>
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
-                  {p.qtyLh != null ? `LH:${p.qtyLh}` : ''}
-                  {p.qtyLh != null && p.qtyRh != null ? ' ' : ''}
-                  {p.qtyRh != null ? `RH:${p.qtyRh}` : ''}
-                </span>
+
               </div>
             )})}
           </div>
@@ -401,38 +487,93 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
       {standardParts.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-            Standard Parts — confirm product match ({standardParts.length})
+            Standard Parts ({standardParts.filter((p: ParsedStandardPart) => !p.isWrongEntry).length} linked
+            {standardParts.filter((p: ParsedStandardPart) => p.isWrongEntry).length > 0 &&
+              `, ${standardParts.filter((p: ParsedStandardPart) => p.isWrongEntry).length} not in master`})
           </h4>
           <div className="rounded-lg border border-slate-200 divide-y text-sm">
-            {standardParts.map((p: ParsedStandardPart, i) => (
-              <div key={i} className="px-3 py-2 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-slate-500">{p.partNumber}</span>
-                  <span className="text-slate-800 flex-1">{p.description}</span>
-                  <span className="text-xs text-slate-400 shrink-0">qty: {p.qty}</span>
-                </div>
-                {p.similarProducts.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs shrink-0 text-slate-500">Match:</Label>
-                    <select
-                      className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      value={productMatches[p.partNumber] ?? ''}
-                      onChange={(e) =>
-                        setProductMatches((prev) => ({ ...prev, [p.partNumber]: e.target.value }))
-                      }
-                    >
-                      <option value="">— skip for now —</option>
-                      {p.similarProducts.map((sp) => (
-                        <option key={sp.id} value={sp.id}>
-                          {sp.partNo ?? sp.id} — {sp.name}{sp.make ? ` (${sp.make})` : ''}
-                        </option>
-                      ))}
-                    </select>
+            {standardParts.map((p: ParsedStandardPart, i) => {
+              const isChanged = p.changeStatus === 'changed'
+              const rowBg = p.isWrongEntry ? 'bg-red-50/50' : isChanged ? 'bg-amber-50 border-l-4 border-l-amber-400' : ''
+              return (
+                <div key={i} className={`px-3 py-2 flex items-start gap-3 ${rowBg}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-slate-700">{p.itemCode}</span>
+                      <span className="text-slate-700 truncate">{p.description}</span>
+                      {isChanged && <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">CHANGED</span>}
+                      {p.lhRh && <span className="text-xs text-slate-700">{p.lhRh}</span>}
+                      {p.isWrongEntry && p.wrongEntryReason && (
+                        <span className="text-xs text-red-600 italic">{p.wrongEntryReason}</span>
+                      )}
+                    </div>
+
+                    {/* Qty — read-only for standard parts */}
+                    <span className="text-xs text-slate-700 ml-auto shrink-0">qty: {p.qty ?? '—'}</span>
+                    {p.lhRh && <span className="text-xs text-slate-700">{p.lhRh}</span>}
                   </div>
-                )}
-                {p.similarProducts.length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No matching products found — will be skipped.</p>
-                )}
+                  <div className="shrink-0 mt-0.5">
+                    {!p.productFound && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                        ✗ Not in master
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {standardParts.some((p: ParsedStandardPart) => p.isWrongEntry) && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2">
+              ⚠ Parts marked "Not in master" must be added to the Product master before re-uploading.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Errors — drawings with no PDF directory (blocking) */}
+      {errors.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">
+            Errors ({errors.length})
+          </h4>
+          <p className="text-xs text-red-700 mb-2">
+            The following drawings have no PDF directory in the ZIP. Re-upload the ZIP with the missing directories before submitting.
+          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 divide-y text-xs">
+            {errors.map((e, i) => (
+              <div key={i} className="px-3 py-1.5 text-red-700 flex items-start gap-1.5">
+                <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Row {e.rowNum}: {e.rawValue ?? '(no value)'} — {e.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Warnings — drawings in ZIP but not in BOM Excel (non-blocking) */}
+      {warnings.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
+            PDF-only Drawings ({warnings.length})
+          </h4>
+          <p className="text-xs text-amber-700 mb-2">
+            These drawings were found in the ZIP but are not listed in your BOM Excel. They have been included using PDF-parsed values. Please verify before submitting.
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 divide-y text-xs">
+            {warnings.map((w: BomParseWarning, i) => (
+              <div key={i} className="px-3 py-2 text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                <div className="space-y-0.5">
+                  <span className="font-mono font-semibold">{w.drawingNo}</span>
+                  {w.description && (
+                    <p><span className="text-amber-600 font-medium">Description:</span> {w.description}</p>
+                  )}
+                  {w.qty != null && (
+                    <p><span className="text-amber-600 font-medium">Qty:</span> {w.qty}</p>
+                  )}
+                  <p className="text-amber-600 italic">{w.note}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -448,7 +589,7 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
           <div className="rounded-lg border border-red-100 bg-red-50 divide-y text-xs">
             {wrongEntries.map((w, i) => (
               <div key={i} className="px-3 py-1.5 text-red-700">
-                Row {w.rowNum}: {w.rawValue} — {w.reason}
+                Row {w.rowNum}: {w.rawValue ?? '(no value)'} — {w.reason}
               </div>
             ))}
           </div>
@@ -456,106 +597,31 @@ function Step2Review({ projectId, s3Key, onDone, onBack }: Step2Props) {
       )}
 
       <div className="flex justify-between items-center pt-2 sticky bottom-0 bg-white pb-1">
-        <Button variant="outline" onClick={onBack}>← Back</Button>
+        <Button variant="outline" onClick={onBack} disabled={submit.isPending}>← Back</Button>
         <div className="flex items-center gap-3">
-          {!canProceed && (
+          {submit.isError && (
+            <span className="text-xs text-red-600 font-medium">
+              Failed to submit — please try again.
+            </span>
+          )}
+          {errors.length > 0 && (
+            <span className="text-xs text-red-600 font-medium">
+              {errors.length} drawing{errors.length === 1 ? '' : 's'} {errors.length === 1 ? 'has' : 'have'} no PDF directory — re-upload the ZIP to proceed
+            </span>
+          )}
+          {errors.length === 0 && !canProceed && (
             <span className="text-xs text-red-600 font-medium">
               {unresolvedCount} wrong {unresolvedCount === 1 ? 'entry' : 'entries'} must be skipped or corrected
             </span>
           )}
           <Button
             className="bg-indigo-600 hover:bg-indigo-700"
-            onClick={handleNext}
-            disabled={!canProceed}
+            onClick={handleSubmit}
+            disabled={!canProceed || submit.isPending}
           >
-            Next: Confirm →
+            {submit.isPending ? 'Submitting…' : 'Confirm & Save BOM'}
           </Button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Step 3 — Confirm & Submit (project-level) ─────────────────────────────────
-interface Step3Props {
-  projectId: string
-  s3Key: string
-  filename: string
-  wrongEntryResolutions: WrongEntryResolution[]
-  productMatchResolutions: ProductMatchResolution[]
-  onSuccess: () => void
-  onBack: () => void
-}
-
-function Step3Confirm({ projectId, s3Key, filename, wrongEntryResolutions, productMatchResolutions, onSuccess, onBack }: Step3Props) {
-  const submit = useSubmitProjectBomUpload(projectId)
-
-  const handleSubmit = async () => {
-    await submit.mutateAsync({
-      projectId,
-      s3Key,
-      filename,
-      wrongEntryResolutions,
-      productMatchResolutions,
-    })
-    onSuccess()
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="rounded-lg border border-slate-200 bg-slate-50 divide-y text-sm">
-        <div className="px-4 py-2.5 flex justify-between">
-          <span className="text-slate-500">File</span>
-          <span className="font-medium font-mono">{filename}</span>
-        </div>
-        <div className="px-4 py-2.5 flex justify-between">
-          <span className="text-slate-500">Wrong-entry resolutions</span>
-          <span className="font-medium">{wrongEntryResolutions.length}</span>
-        </div>
-        <div className="px-4 py-2.5 flex justify-between">
-          <span className="text-slate-500">Standard parts</span>
-          <span className="font-medium">
-            {productMatchResolutions.filter(r => !!r.productId).length} matched
-            {productMatchResolutions.filter(r => !r.productId).length > 0 && (
-              <span className="text-slate-400 ml-1">
-                / {productMatchResolutions.filter(r => !r.productId).length} unmatched
-              </span>
-            )}
-          </span>
-        </div>
-      </div>
-
-      {wrongEntryResolutions.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Resolutions</p>
-          <ul className="text-xs space-y-0.5 text-slate-600">
-            {wrongEntryResolutions.map((r, i) => (
-              <li key={i} className="flex items-center gap-2">
-                {r.action === 'skip'
-                  ? <span className="text-slate-400">Skip: <span className="font-mono">{r.originalDrawingNo}</span></span>
-                  : <span className="text-indigo-600">Override <span className="font-mono">{r.originalDrawingNo}</span> → <span className="font-mono">{r.correctedDrawingNo}</span></span>
-                }
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {submit.isError && (
-        <p className="text-sm text-red-600 flex items-center gap-1">
-          <XCircle className="h-4 w-4" /> Failed to submit — please try again.
-        </p>
-      )}
-
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack} disabled={submit.isPending}>← Back</Button>
-        <Button
-          className="bg-indigo-600 hover:bg-indigo-700"
-          onClick={handleSubmit}
-          disabled={submit.isPending}
-        >
-          {submit.isPending ? 'Submitting…' : 'Confirm & Save BOM'}
-        </Button>
       </div>
     </div>
   )
@@ -571,19 +637,11 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
   const [step, setStep] = useState(0)
   const [s3Key, setS3Key] = useState('')
   const [filename, setFilename] = useState('')
-  const [wrongResolutions, setWrongResolutions] = useState<WrongEntryResolution[]>([])
-  const [productMatches, setProductMatches] = useState<ProductMatchResolution[]>([])
 
   const handleStep1Done = (key: string) => {
     setS3Key(key)
     setFilename(key.split('/').pop() ?? key)
     setStep(1)
-  }
-
-  const handleStep2Done = (wr: WrongEntryResolution[], pm: ProductMatchResolution[]) => {
-    setWrongResolutions(wr)
-    setProductMatches(pm)
-    setStep(2)
   }
 
   return (
@@ -592,7 +650,7 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base">Upload BOM</DialogTitle>
-            <StepDots current={step} total={3} />
+            <StepDots current={step} total={2} />
           </div>
         </DialogHeader>
 
@@ -607,19 +665,9 @@ export function BomUploadWizard({ projectId, onClose }: BomUploadWizardProps) {
             <Step2Review
               projectId={projectId}
               s3Key={s3Key}
-              onDone={handleStep2Done}
-              onBack={() => setStep(0)}
-            />
-          )}
-          {step === 2 && (
-            <Step3Confirm
-              projectId={projectId}
-              s3Key={s3Key}
               filename={filename}
-              wrongEntryResolutions={wrongResolutions}
-              productMatchResolutions={productMatches}
               onSuccess={onClose}
-              onBack={() => setStep(1)}
+              onBack={() => setStep(0)}
             />
           )}
         </div>

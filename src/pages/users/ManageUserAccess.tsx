@@ -48,7 +48,7 @@ function useAssignedAndAvailable(userId: string) {
   const user = userData?.user
   const allRoles = rolesData?.getRoles ?? []
   const userRoleSet = useMemo(
-    () => new Set((user?.roles ?? []).map((r) => r.trim())),
+    () => new Set((user?.roles ?? []).flatMap((r) => [r.id, r.name])),
     [user?.roles]
   )
   const assignedRoles = useMemo(
@@ -211,11 +211,11 @@ export function ManageUserAccess() {
 
       if (sourceZone === AVAILABLE_ZONE && dropZone === ASSIGNED_ZONE) {
         // Optimistic update: move role to assigned so UI updates immediately
-        queryClient.setQueryData<{ user: { roles?: string[] } }>(userKeys.detail(userId), (old) => {
+        queryClient.setQueryData<{ user: { roles?: { id: string; name: string }[] } }>(userKeys.detail(userId), (old) => {
           if (!old?.user) return old
           const roles = old.user.roles ?? []
-          if (roles.includes(role.name) || roles.includes(role.id)) return old
-          return { user: { ...old.user, roles: [...roles, role.name] } }
+          if (roles.some(r => r.id === role.id)) return old
+          return { user: { ...old.user, roles: [...roles, { id: role.id, name: role.name }] } }
         })
         assignRole.mutate(
           { userId, roleId: role.id },
@@ -223,9 +223,9 @@ export function ManageUserAccess() {
             onSuccess: () => toast.success('Success', { description: `Role "${role.name}" assigned to user.` }),
             onError: (err) => {
               // Rollback optimistic update on error
-              queryClient.setQueryData<{ user: { roles?: string[] } }>(userKeys.detail(userId), (old) => {
+              queryClient.setQueryData<{ user: { roles?: { id: string; name: string }[] } }>(userKeys.detail(userId), (old) => {
                 if (!old?.user) return old
-                const roles = (old.user.roles ?? []).filter((r) => r !== role.name && r !== role.id)
+                const roles = (old.user.roles ?? []).filter((r) => r.id !== role.id)
                 return { user: { ...old.user, roles } }
               })
               if (!isPermissionError(err)) {
@@ -238,9 +238,9 @@ export function ManageUserAccess() {
         )
       } else if (sourceZone === ASSIGNED_ZONE && dropZone === AVAILABLE_ZONE) {
         // Optimistic update: remove role from assigned so UI updates immediately
-        queryClient.setQueryData<{ user: { roles?: string[] } }>(userKeys.detail(userId), (old) => {
+        queryClient.setQueryData<{ user: { roles?: { id: string; name: string }[] } }>(userKeys.detail(userId), (old) => {
           if (!old?.user) return old
-          const roles = (old.user.roles ?? []).filter((r) => r !== role.name && r !== role.id)
+          const roles = (old.user.roles ?? []).filter((r) => r.id !== role.id)
           return { user: { ...old.user, roles } }
         })
         removeRole.mutate(
@@ -249,11 +249,11 @@ export function ManageUserAccess() {
             onSuccess: () => toast.success('Success', { description: `Role "${role.name}" removed from user.` }),
             onError: (err) => {
               // Rollback: add role back to assigned
-              queryClient.setQueryData<{ user: { roles?: string[] } }>(userKeys.detail(userId), (old) => {
+              queryClient.setQueryData<{ user: { roles?: { id: string; name: string }[] } }>(userKeys.detail(userId), (old) => {
                 if (!old?.user) return old
                 const roles = old.user.roles ?? []
-                if (roles.includes(role.name) || roles.includes(role.id)) return old
-                return { user: { ...old.user, roles: [...roles, role.name] } }
+                if (roles.some(r => r.id === role.id)) return old
+                return { user: { ...old.user, roles: [...roles, { id: role.id, name: role.name }] } }
               })
               if (!isPermissionError(err)) {
                 toast.error('Failed to remove role', {

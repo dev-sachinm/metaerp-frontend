@@ -26,8 +26,23 @@ export function resolvePermissionEntityKey(
   const has = (key: string): boolean =>
     entityKeys instanceof Set ? entityKeys.has(key) : key in entityKeys
 
+  // Known backend renames / alternates (keep UI resilient across deployments)
+  const ALTERNATES: Record<string, string[]> = {
+    // Backend renamed "Fixture Product" permission key to bom_standard_part
+    bom_standard_part: ['fixture_product'],
+    fixture_product: ['bom_standard_part'],
+  }
+
   // 1. Direct match
   if (has(uiEntity)) return uiEntity
+
+  // 1b. Alternate keys
+  const alts = ALTERNATES[uiEntity]
+  if (alts) {
+    for (const alt of alts) {
+      if (has(alt)) return alt
+    }
+  }
 
   // 2. Try adding 's'  ("user" → "users")
   const withS = uiEntity + 's'

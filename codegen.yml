@@ -1,0 +1,28 @@
+schema: http://localhost:8000/graphql
+documents: 'src/**/*.{ts,tsx}'
+generates:
+  src/graphql/types.generated.ts:
+    plugins:
+      - typescript
+      - typescript-operations
+      - typed-document-node
+    config:
+      # Improve type safety
+      strictScalars: true
+      scalars:
+        DateTime: string
+      # Use exact types
+      enumsAsTypes: true
+      # Better naming
+      namingConvention:
+        typeNames: pascal-case#default
+        enumValues: keep
+      # Add descriptions from schema
+      addDescriptionsToTypes: true
+      # Skip __typename in types
+      skipTypename: false
+      # Make all fields non-nullable by default when possible
+      avoidOptionals:
+        field: false
+        inputValue: false
+        object: false

@@ -117,9 +117,9 @@ export function ViewProduct() {
                   <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
                     {product.name}
                   </CardTitle>
-                  {product.partNo && (
+                  {product.itemCode && (
                     <CardDescription className="mt-1 text-sm text-slate-500">
-                      Part No: {product.partNo}
+                      Item Code: {product.itemCode}
                     </CardDescription>
                   )}
                 </div>
@@ -131,8 +131,8 @@ export function ViewProduct() {
                 {canShowColumn(readableFields, 'name') && (
                   <FieldRow label="Name" value={product.name} />
                 )}
-                {canShowColumn(readableFields, 'partNo') && (
-                  <FieldRow label="Part No" value={product.partNo} />
+                {canShowColumn(readableFields, 'itemCode') && (
+                  <FieldRow label="Item Code" value={product.itemCode} />
                 )}
                 {canShowColumn(readableFields, 'categoryId') && (
                   <FieldRow label="Category" value={product.categoryId} />
@@ -143,8 +143,8 @@ export function ViewProduct() {
                 {canShowColumn(readableFields, 'make') && (
                   <FieldRow label="Make" value={product.make} />
                 )}
-                {canShowColumn(readableFields, 'unitId') && (
-                  <FieldRow label="Unit" value={product.unitName ?? product.unitId} />
+                {canShowColumn(readableFields, 'puUnitId') && (
+                  <FieldRow label="Unit" value={product.puUnitName ?? product.puUnitId} />
                 )}
                 {canShowColumn(readableFields, 'quantity') && (
                   <FieldRow

@@ -50,17 +50,14 @@ export function NetworkError({ onRetry }: NetworkErrorProps) {
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 animate-in fade-in duration-300" />
-
-      {/* Error Banner */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-in slide-in-from-top duration-300">
+      {/* Error Banner (non-blocking; do not lock entire UI) */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-in slide-in-from-top duration-300 pointer-events-none">
         <div
           className={`rounded-xl shadow-2xl border-2 overflow-hidden ${
             isOnline
               ? 'bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-400'
               : 'bg-gradient-to-r from-red-500 to-orange-500 border-red-400'
-          }`}
+          } pointer-events-auto`}
         >
           <div className="p-4 flex items-center gap-4">
             {/* Icon */}

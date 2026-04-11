@@ -1,3 +1,4 @@
+// GraphQL mutation documents (generated/maintained manually)
 export const CREATE_FIXTURE = `
   mutation CreateFixture($input: CreateFixtureInput!) {
     createFixture(input: $input) { id fixtureNumber fixtureSeq status }

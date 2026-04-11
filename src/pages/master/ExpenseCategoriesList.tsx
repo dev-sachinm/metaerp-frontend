@@ -5,20 +5,38 @@ import { useDeleteExpenseCategory } from '@/hooks/graphql/useMasterDataMutations
 import { useAccessibleFields, canShowColumn } from '@/hooks/usePermissions'
 import type { ExpenseCategory } from '@/types/masterData'
 import { Badge } from '@/components/ui/badge'
+import { Search, X } from 'lucide-react'
+import { useDebounce } from '@/hooks/useDebounce'
+import { Input } from '@/components/ui/input'
 
-const PAGE_SIZE = 20
 const ENTITY = 'expense_category'
 
 export function ExpenseCategoriesList() {
-  const [page, setPage] = useState(0)
-  const { data, isLoading, isError, error, refetch } = useExpenseCategoriesList(page * PAGE_SIZE, PAGE_SIZE, undefined)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [f_nameContains, setF_nameContains] = useState('')
+  const [f_codeContains, setF_codeContains] = useState('')
+  const db_nameContains = useDebounce(f_nameContains, 350)
+  const db_codeContains = useDebounce(f_codeContains, 350)
+
+  const resetPage = () => setPage(1)
+  const hasFilters = !!(  f_nameContains || f_codeContains)
+  const clearAll = () => { setF_nameContains('');  setF_codeContains(''); setPage(1) }
+
+  const { data, isLoading, isError, error, refetch } = useExpenseCategoriesList(page, pageSize, {
+    nameContains: db_nameContains || undefined,
+    codeContains: db_codeContains || undefined,
+  })
   const deleteEc = useDeleteExpenseCategory()
   const readableFields = useAccessibleFields(ENTITY, 'read')
 
   const list = data?.expenseCategoriesList
   const items = list?.items ?? []
   const total = list?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = list?.totalPages ?? 1
+  const hasMore = list?.hasMore ?? false
+  const firstPage = list?.firstPage ?? 1
+  const lastPage = list?.lastPage ?? 1
 
   const handleDelete = useCallback(
     (row: ExpenseCategory) => {
@@ -63,6 +81,34 @@ export function ExpenseCategoriesList() {
     `${r.code ?? ''} ${r.name ?? ''} ${r.parentName ?? ''}`.toLowerCase()
 
   return (
+    <>
+      <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 mb-3 flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Name</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input value={f_nameContains} onChange={(e) => { setF_nameContains(e.target.value); resetPage() }}
+              placeholder="Search name…" className="h-8 w-48 pl-6 text-xs" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Code</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+            <Input value={f_codeContains} onChange={(e) => { setF_codeContains(e.target.value); resetPage() }}
+              placeholder="Search code…" className="h-8 w-36 pl-6 text-xs" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pb-0.5">
+          {hasFilters && (
+            <button type="button" onClick={clearAll}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:border-red-300 transition-colors">
+              <X className="h-3 w-3" /> Clear filters
+            </button>
+          )}
+          {isLoading && hasFilters && <span className="text-xs text-slate-400 italic">Searching…</span>}
+        </div>
+      </div>
     <MasterDataListPage<ExpenseCategory>
       title="Expense Categories"
       description="Manage expense categories"
@@ -72,19 +118,22 @@ export function ExpenseCategoriesList() {
       total={total}
       items={items}
       columns={columns}
-      enableSearch
-      searchPlaceholder="Search by code, name, or parent…"
       getSearchText={getSearchText}
       getEditHref={(r) => `/master/expense-categories/${r.id}/edit`}
       onDelete={handleDelete}
       deletePending={deleteEc.isPending}
       page={page}
-      pageSize={PAGE_SIZE}
+      pageSize={pageSize}
       totalPages={totalPages}
+      hasMore={hasMore}
+      firstPage={firstPage}
+      lastPage={lastPage}
       onPageChange={setPage}
+      onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
       isError={isError}
       error={error}
       onRetry={() => refetch()}
     />
+    </>
   )
 }

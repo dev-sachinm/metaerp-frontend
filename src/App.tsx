@@ -43,10 +43,18 @@ import { EditSupplier } from './pages/master/EditSupplier'
 import { VendorsList } from './pages/master/VendorsList'
 import { CreateVendor } from './pages/master/CreateVendor'
 import { EditVendor } from './pages/master/EditVendor'
+import { PurchaseOrdersList } from './pages/purchase-orders/PurchaseOrdersList'
+import { CreatePurchaseOrder } from './pages/purchase-orders/CreatePurchaseOrder'
+import { ViewPurchaseOrder } from './pages/purchase-orders/ViewPurchaseOrder'
+import { EditPurchaseOrder } from './pages/purchase-orders/EditPurchaseOrder'
 import { ProjectsList } from './pages/projects/ProjectsList'
 import { ProjectAssignmentPage } from './pages/projects/ProjectAssignmentPage'
 import { ViewProject } from './pages/projects/ViewProject'
 import { EditProject } from './pages/projects/EditProject'
+import { EmailsList } from './pages/email/EmailsList'
+import { AuditLogsList } from './pages/audit/AuditLogsList'
+import { ViewEmail } from './pages/email/ViewEmail'
+import { SuperadminDashboardPage } from './pages/dashboard/SuperadminDashboardPage'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuthQueries'
@@ -76,9 +84,10 @@ function AppContent() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
   const [initTimedOut, setInitTimedOut] = useState(false)
+  const isInitialized = useIsInitialized()
+  const user = useAuthStore((state) => state.user)
+  useEnabledModulesQuery({ enabled: !!user })
 
-  // Fail-safe: if auth bootstrap keeps loading too long with an existing token,
-  // show a clear backend-unreachable screen instead of infinite spinner.
   useEffect(() => {
     setInitTimedOut(false)
     if (!accessToken) return
@@ -91,18 +100,10 @@ function AppContent() {
     return () => window.clearTimeout(timer)
   }, [accessToken, isLoading])
 
-  // Initialize auth on mount
   useEffect(() => {
     if (isLoading) return
-
-    // Note: useAuth hook already syncs user and permissions to store via its own useEffects
-    // Token is already restored from localStorage on app load
-    // We just need to mark initialization as complete
     setIsInitialized(true)
   }, [isLoading, setIsInitialized])
-
-  const isInitialized = useIsInitialized()
-  const user = useAuthStore((state) => state.user)
 
   if (!isInitialized && initTimedOut) {
     return (
@@ -135,9 +136,6 @@ function AppContent() {
       </div>
     )
   }
-
-  // Fetch enabled modules when user is logged in (tenant context); store drives nav and RequireModule
-  useEnabledModulesQuery({ enabled: !!user })
 
   return (
     <Routes>
@@ -391,6 +389,63 @@ function AppContent() {
         }
       />
 
+      {/* Audit Logs (core, permission guarded on audit_log.read) */}
+      <Route
+        path="/audit-logs"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="audit_log" action="delete">
+                <AuditLogsList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      {/* Emails (core, permission guarded on email.read) */}
+      <Route
+        path="/emails"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="email" action="read">
+                <EmailsList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/emails/:id"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <ProtectedRoute entity="email" action="read">
+                <ViewEmail />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
       {/* Master Data (module master_data) */}
       <Route
         path="/master"
@@ -446,6 +501,81 @@ function AppContent() {
         <Route path="vendors/create" element={<CreateVendor />} />
         <Route path="vendors/:id/edit" element={<EditVendor />} />
       </Route>
+
+      {/* Purchase Orders */}
+      <Route
+        path="/purchase-orders"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="list">
+                <PurchaseOrdersList />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/purchase-orders/create"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="create">
+                <CreatePurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/purchase-orders/:id/view"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="read">
+                <ViewPurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      <Route
+        path="/purchase-orders/:id/edit"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="master_data">
+              <ProtectedRoute entity="purchase_order" action="update">
+                <EditPurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
 
       {/* Project Management (module project_management) */}
       <Route
@@ -574,6 +704,24 @@ function AppContent() {
           ) : user ? (
             <RequireModule moduleId="project_management">
               <ProjectAssignmentPage />
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* Superadmin Dashboard */}
+      <Route
+        path="/dashboard/superadmin"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="core">
+              <SuperadminDashboardPage />
             </RequireModule>
           ) : (
             <Navigate to="/login" replace />

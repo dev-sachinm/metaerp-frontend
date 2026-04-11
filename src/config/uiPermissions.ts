@@ -27,6 +27,13 @@ export const UI_PERMISSIONS = {
   UPLOAD_BOM:          { entity: 'fixture', action: 'update' },
   VIEW_BOM:            { entity: 'fixture', action: 'read'   },
 
+  // ── Purchase orders (BOM: create manufacturing / standard PO) ─────────────
+  /** Requires `purchase_order.create` on backend (procurement). */
+  CREATE_PURCHASE_ORDER_PO: { entity: 'purchase_order', action: 'create' },
+
+  /** Store / QA: receive standard parts, received LH/RH, bulk mfg status, unit price — uses `fixture.update`. */
+  MANAGE_BOM_RECEIVING: { entity: 'fixture', action: 'update' },
+
   // ── Project Assignments ───────────────────────────────────────────────────
   ASSIGN_PROJECT:      { entity: 'project_assignment', action: 'update' },
 
@@ -39,6 +46,10 @@ export const UI_PERMISSIONS = {
   MANAGE_ROLE_PERMS:   { entity: 'role', action: 'update' },
   DELETE_ROLE:         { entity: 'role', action: 'delete' },
 
+  // ── Dynamic Custom Checks ───────────────────────────────────────────────────
+  // These are special cases where we want to dynamically check a string rather than a hardcoded enum.
+  // They should be resolved using `useCanAccess` instead of `useUIPermission`.
+  
   // ── Master Data (generic — entity-level create/update/delete) ─────────────
   CREATE_CUSTOMER:     { entity: 'customer',         action: 'create' },
   EDIT_CUSTOMER:       { entity: 'customer',         action: 'update' },
@@ -52,6 +63,12 @@ export const UI_PERMISSIONS = {
   CREATE_VENDOR:       { entity: 'vendor',           action: 'create' },
   EDIT_VENDOR:         { entity: 'vendor',           action: 'update' },
   DELETE_VENDOR:       { entity: 'vendor',           action: 'delete' },
+
+  // ── Audit Logs ──────────────────────────────────────────────────────────────
+  /** Full audit page in sidebar — requires delete permission (admin-level only). */
+  AUDIT_LOGS_MENU:     { entity: 'audit_log', action: 'delete' },
+  /** Dashboard widget — requires only read permission. */
+  AUDIT_LOGS_WIDGET:   { entity: 'audit_log', action: 'read'   },
 } satisfies Record<string, UIPermissionDef>
 
 export type UIPermissionKey = keyof typeof UI_PERMISSIONS

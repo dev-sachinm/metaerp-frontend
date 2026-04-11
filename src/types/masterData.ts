@@ -132,12 +132,17 @@ export interface Product {
   id: string
   name: string
   categoryId: string | null
-  partNo: string | null
+  itemCode: string | null
   description: string | null
   make: string | null
-  unitId: string | null
-  unitName?: string | null
+  puUnitId: string | null
+  stkUnitId: string | null
+  puUnitName?: string | null
+  stkUnitName?: string | null
+  procMtd?: string | null
+  locationInStore?: string | null
   quantity: number | null
+  unitPrice?: number | null
   isActive: boolean
   createdBy?: string | null
   createdByUsername?: string | null
@@ -151,9 +156,9 @@ export interface Product {
 export interface PaginatedList<T> {
   items: T[]
   total: number
-  skip: number
-  limit: number
   page: number
   totalPages: number
   hasMore: boolean
+  firstPage: number
+  lastPage: number
 }
