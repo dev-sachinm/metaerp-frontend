@@ -8,12 +8,12 @@ import { getErrorMessage } from '@/lib/graphqlErrors'
 import { BomTree } from './BomTree'
 import { AddFixtureModal } from './AddFixtureModal'
 import { EditFixtureModal } from './EditFixtureModal'
-import { FIXTURE_STATUS_ORDER, FIXTURE_STATUS_LABELS } from '@/types/design'
-import type { FixtureStatus } from '@/types/design'
+import { FIXTURE_STAGE_ORDER, FIXTURE_STAGE_LABELS } from '@/types/design'
+import type { FixtureStage } from '@/types/design'
 
-const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'All statuses' },
-  ...FIXTURE_STATUS_ORDER.map((s) => ({ value: s, label: FIXTURE_STATUS_LABELS[s] })),
+const STAGE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All stages' },
+  ...FIXTURE_STAGE_ORDER.map((s) => ({ value: s, label: FIXTURE_STAGE_LABELS[s] })),
 ]
 
 interface Props {
@@ -21,16 +21,17 @@ interface Props {
   projectName: string
   canCreate?: boolean
   canUpdate?: boolean
+  projectStartDate?: string | null
 }
 
-export function FixturesTab({ projectId, projectName, canCreate = true }: Props) {
-  const [statusFilter, setStatusFilter] = useState<string>('')
+export function FixturesTab({ projectId, projectName, canCreate = true, projectStartDate }: Props) {
+  const [stageFilter, setStageFilter] = useState<string>('')
   const [showAdd, setShowAdd] = useState(false)
   const [editFixtureId, setEditFixtureId] = useState<string | null>(null)
 
   const { data, isLoading, isError, error, refetch } = useFixtures(
     projectId,
-    statusFilter || undefined
+    stageFilter || undefined
   )
 
   const fixtures = data?.fixtures?.items ?? []
@@ -41,12 +42,12 @@ export function FixturesTab({ projectId, projectName, canCreate = true }: Props)
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          {STATUS_FILTER_OPTIONS.map((opt) => (
+          {STAGE_FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setStatusFilter(opt.value)}
+              onClick={() => setStageFilter(opt.value)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                statusFilter === opt.value
+                stageFilter === opt.value
                   ? 'bg-indigo-600 text-white border-indigo-600'
                   : 'border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600'
               }`}
@@ -84,9 +85,9 @@ export function FixturesTab({ projectId, projectName, canCreate = true }: Props)
       ) : fixtures.length === 0 ? (
         <div className="text-center py-14 text-slate-500">
           <p className="text-sm font-medium">
-            {statusFilter ? `No fixtures with status "${FIXTURE_STATUS_LABELS[statusFilter as FixtureStatus]}"` : 'No fixtures yet'}
+            {stageFilter ? `No fixtures at stage "${FIXTURE_STAGE_LABELS[stageFilter as FixtureStage]}"` : 'No fixtures yet'}
           </p>
-          {!statusFilter && canCreate && (
+          {!stageFilter && canCreate && (
             <Button
               size="sm"
               variant="outline"
@@ -101,9 +102,9 @@ export function FixturesTab({ projectId, projectName, canCreate = true }: Props)
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Badge variant="secondary">{total} fixture{total !== 1 ? 's' : ''}</Badge>
-            {statusFilter && (
+            {stageFilter && (
               <Badge variant="outline" className="text-indigo-600">
-                Filtered: {FIXTURE_STATUS_LABELS[statusFilter as FixtureStatus]}
+                Filtered: {FIXTURE_STAGE_LABELS[stageFilter as FixtureStage]}
               </Badge>
             )}
           </div>
@@ -111,6 +112,7 @@ export function FixturesTab({ projectId, projectName, canCreate = true }: Props)
             projectId={projectId}
             projectName={projectName}
             fixtures={fixtures}
+            projectStartDate={projectStartDate}
           />
         </div>
       )}

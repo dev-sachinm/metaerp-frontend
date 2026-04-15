@@ -261,6 +261,7 @@ function ProjectNode({ project, canRead, canUpdate, canDelete, canAssign }: Proj
                 projectName={project.name}
                 fixtures={fixtures}
                 showRoot={false}
+                projectStartDate={project.inProgressAt}
               />
             )}
           </div>

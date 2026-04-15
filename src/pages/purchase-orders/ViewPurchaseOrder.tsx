@@ -210,8 +210,14 @@ export function ViewPurchaseOrder() {
           <Button
             size="sm"
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!po.enableCosting}
-            title={!po.enableCosting ? 'Costing is not enabled for this PO' : undefined}
+            disabled={!po.sendPoEnabled}
+            title={
+              !po.sendPoEnabled
+                ? isManufacturedPo && !po.enableCosting
+                  ? 'Enable costing first'
+                  : 'Sending is not enabled for this PO'
+                : undefined
+            }
           >
             <Send className="h-4 w-4" /> Send
           </Button>

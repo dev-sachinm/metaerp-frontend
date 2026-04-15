@@ -4,6 +4,72 @@
  * instead of "No records found" or raw backend messages when the user lacks permission.
  */
 
+// ── Login error classification ────────────────────────────────────────────────
+
+/** Exact messages returned by the backend login mutation */
+export const LOGIN_ERROR_MESSAGES = {
+  INVALID_CREDENTIALS: 'Invalid username or password.',
+  ACCOUNT_DISABLED: 'Account is disabled. Please contact your administrator.',
+} as const
+
+export type LoginErrorType = 'invalid_credentials' | 'account_disabled' | 'network' | 'unknown'
+
+export interface LoginErrorInfo {
+  message: string
+  type: LoginErrorType
+}
+
+/**
+ * Classifies a login mutation error into a typed result with a user-friendly message.
+ * Handles the two known backend error messages plus network/generic fallbacks.
+ */
+export function classifyLoginError(error: unknown): LoginErrorInfo {
+  const err = error as { response?: { errors?: Array<{ message?: string }> }; message?: string }
+  const raw = err.response?.errors?.[0]?.message ?? err.message ?? ''
+  const lower = raw.toLowerCase()
+
+  if (
+    raw === LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS ||
+    (/invalid/i.test(raw) && /(username|password)/i.test(raw))
+  ) {
+    return {
+      message: 'Invalid username or password. Please check your credentials and try again.',
+      type: 'invalid_credentials',
+    }
+  }
+
+  if (raw === LOGIN_ERROR_MESSAGES.ACCOUNT_DISABLED || /account is disabled/i.test(raw)) {
+    return {
+      message: 'Your account has been deactivated. Please contact your administrator.',
+      type: 'account_disabled',
+    }
+  }
+
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('failed to fetch')) {
+    return {
+      message: 'Unable to connect. Please check your internet connection and try again.',
+      type: 'network',
+    }
+  }
+
+  if (lower.includes('timeout')) {
+    return { message: 'The request timed out. Please try again.', type: 'unknown' }
+  }
+
+  return {
+    message: raw.trim() || "We couldn't sign you in. Please try again.",
+    type: 'unknown',
+  }
+}
+
+/** Returns true if the error is a known, user-facing login error (not a server/unexpected error). */
+export function isKnownLoginError(error: unknown): boolean {
+  const type = classifyLoginError(error).type
+  return type === 'invalid_credentials' || type === 'account_disabled'
+}
+
+// ── Permission / forbidden errors ─────────────────────────────────────────────
+
 const FORBIDDEN_CODE = 'FORBIDDEN'
 const PERMISSION_MESSAGE_PATTERNS = [
   /not enough permissions/i,

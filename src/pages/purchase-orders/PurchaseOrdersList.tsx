@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Eye, Trash2, Edit2, Search, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { usePurchaseOrders } from '@/hooks/graphql/usePurchaseOrderQueries'
-import { useDeletePurchaseOrder, useTogglePOCosting } from '@/hooks/graphql/usePurchaseOrderMutations'
+import { useDeletePurchaseOrder, useTogglePOCosting, useTogglePOSendEnabled } from '@/hooks/graphql/usePurchaseOrderMutations'
 import { useCanAccess, useFieldAccess } from '@/hooks/usePermissions'
 import { useCurrentUser } from '@/stores/authStore'
 import { Loader } from '@/components/Loader'
@@ -26,9 +26,10 @@ export function PurchaseOrdersList() {
   const canUpdate = useCanAccess('purchase_order', 'update')
   const canDelete = useCanAccess('purchase_order', 'delete')
   const costingFieldAccess = useFieldAccess('purchase_order', 'enable_costing')
+  const sendPoFieldAccess = useFieldAccess('purchase_order', 'send_po_enabled')
 
   const currentUser = useCurrentUser()
-  const PRIVILEGED_ROLES = ['superadmin', 'Project Manager', 'Operations Head']
+  const PRIVILEGED_ROLES = ['superadmin', 'Project Manager', 'Operations Head', 'Operations Head (Owner)', 'Inventory Manager(Store Keeper)']
   const isPrivileged = (currentUser?.roles ?? []).some(r => PRIVILEGED_ROLES.includes(r))
 
   const [page, setPage] = useState(1)
@@ -57,6 +58,7 @@ export function PurchaseOrdersList() {
 
   const deleteMutation = useDeletePurchaseOrder()
   const toggleCosting = useTogglePOCosting()
+  const toggleSendPo = useTogglePOSendEnabled()
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const handleDelete = async () => {
@@ -187,6 +189,7 @@ export function PurchaseOrdersList() {
                     <th className="px-4 py-3">Completed</th>
                     {isPrivileged && <th className="px-4 py-3">Created By</th>}
                     <th className="px-4 py-3 text-center">Costing</th>
+                    {sendPoFieldAccess !== 'hidden' && <th className="px-4 py-3 text-center">Send PO</th>}
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -225,7 +228,7 @@ export function PurchaseOrdersList() {
                         <td className="px-4 py-3 text-slate-600 text-sm">{po.createdByUsername || '—'}</td>
                       )}
                       <td className="px-4 py-3">
-                        {(po.poType === 'ManufacturedPart' || po.poType === 'StandardPart') && costingFieldAccess !== 'hidden' && (() => {
+                        {po.poType === 'ManufacturedPart' && costingFieldAccess !== 'hidden' && (() => {
                           const canWrite = costingFieldAccess === 'write'
                           const isOn = po.enableCosting
                           const isPending = toggleCosting.isPending
@@ -258,6 +261,41 @@ export function PurchaseOrdersList() {
                           )
                         })()}
                       </td>
+                      {sendPoFieldAccess !== 'hidden' && (() => {
+                        const canWrite = sendPoFieldAccess === 'write'
+                        const isOn = po.sendPoEnabled !== false
+                        const isPending = toggleSendPo.isPending
+                        return (
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => canWrite && !isPending && toggleSendPo.mutate({ id: po.id, sendPoEnabled: !isOn })}
+                              disabled={!canWrite}
+                              title={undefined}
+                              aria-label={isOn ? 'Disable send PO' : 'Enable send PO'}
+                              className={[
+                                'relative inline-flex h-6 w-[76px] shrink-0 items-center rounded-full px-0.5',
+                                'overflow-hidden transition-colors duration-300 ease-in-out',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                                isOn
+                                  ? 'bg-emerald-500 focus-visible:ring-emerald-500 shadow-[0_2px_6px_rgba(16,185,129,0.4)]'
+                                  : 'bg-red-400 focus-visible:ring-red-400 shadow-[0_2px_6px_rgba(248,113,113,0.3)]',
+                                canWrite ? 'cursor-pointer hover:brightness-105 active:scale-[0.97]' : 'cursor-default opacity-70',
+                              ].join(' ')}
+                            >
+                              <span className="absolute left-1 z-0 select-none pointer-events-none text-[10px] font-bold tracking-wider uppercase text-white whitespace-nowrap">
+                                {isOn ? 'Enabled' : 'Disabled'}
+                              </span>
+                              <span
+                                className={[
+                                  'relative z-10 h-5 w-5 shrink-0 rounded-full bg-white shadow-md',
+                                  'transition-transform duration-300 ease-in-out',
+                                  isOn ? 'translate-x-[52px]' : 'translate-x-0',
+                                ].join(' ')}
+                              />
+                            </button>
+                          </td>
+                        )
+                      })()}
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
                           <Button

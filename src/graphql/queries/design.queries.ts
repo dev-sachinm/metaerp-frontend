@@ -1,9 +1,14 @@
 export const GET_FIXTURES = `
-  query Fixtures($projectId: String!, $skip: Int, $limit: Int, $status: String, $isActive: Boolean) {
-    fixtures(projectId: $projectId, skip: $skip, limit: $limit, status: $status, isActive: $isActive) {
+  query Fixtures($projectId: String!, $skip: Int, $limit: Int, $stage: String, $isActive: Boolean) {
+    fixtures(projectId: $projectId, skip: $skip, limit: $limit, stage: $stage, isActive: $isActive) {
       items {
-        id fixtureNumber fixtureSeq status isActive
+        id fixtureNumber fixtureSeq stage isActive
         bomFilename bomUploadedAt
+        assemblyUserId assemblyUserName
+        stageBomUploadedAt stageMfgPurchaseStartedAt
+        stageAssemblyCompletedAt stageCmmCompletedAt stageDispatchAt
+        mfgPurchaseCompletedAt assemblyStartedAt
+        stageInfo { stage label displayStatus enteredAt }
       }
       total
     }
@@ -13,8 +18,12 @@ export const GET_FIXTURES = `
 export const GET_FIXTURE = `
   query Fixture($id: String!) {
     fixture(id: $id) {
-      id fixtureNumber fixtureSeq description status isActive
-      bomFilename bomUploadedAt bomUploadedBy createdAt
+      id fixtureNumber fixtureSeq description stage isActive
+      bomFilename bomUploadedAt bomUploadedBy createdAt modifiedAt
+      stageBomUploadedAt stageMfgPurchaseStartedAt
+      stageAssemblyCompletedAt stageCmmCompletedAt stageDispatchAt
+      mfgPurchaseCompletedAt assemblyStartedAt
+      stageInfo { stage label displayStatus enteredAt }
     }
   }
 `
@@ -36,7 +45,10 @@ export const GET_BOM_VIEW = `
       standardPartNameContains: $stdName
       standardPartMakeContains: $stdMake
     ) {
-      fixture { id fixtureNumber status }
+      fixture {
+        id fixtureNumber stage
+        stageInfo { stage label displayStatus enteredAt }
+      }
       manufacturedParts {
         id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
         vendorId vendorName
@@ -48,7 +60,7 @@ export const GET_BOM_VIEW = `
         id fixtureId productId unitId supplierId supplierName
         uom lhRh
         itemCode productName productMake
-        qty expectedQty
+        qty receivedQuantity expectedQty
         currentStock
         purchaseQty
         purchaseUnitPrice

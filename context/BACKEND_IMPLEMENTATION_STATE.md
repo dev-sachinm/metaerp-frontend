@@ -477,7 +477,7 @@ All operations exposed by the schema:
 | `enabledModules` | — | `[ModuleStatusType!]!` | **Single source of truth for module visibility.** List all modules and their enabled state (DB-driven). Returns `moduleId`, `enabled`, `displayName`, `description`. No auth required. |
 | `currentUser` | — | `UserType` | Current authenticated user (id, firstName, lastName, dateOfBirth, mobileNumber, username, email, isActive, roles). `null` if not authenticated. |
 | `user` | `userId: String!` | `UserType` | Get a single user by id. Returns all user fields. Requires read permission on `user` entity. Returns `null` if user not found or no permission. |
-| `users` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `roleId: String`, `roleName: String` | `PaginatedUsersType!` | Page-based list of users. Requires read permission on `user` entity. `roleId` or `roleName` (mutually exclusive — `roleId` takes priority) filters to users assigned to that role. Use `roleName: "Assembly"` to get Assembly-role users for the Collected by Assembly dropdown. Response: `items`, `total`, `skip`, `limit`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
+| `users` | `page: Int = 1`, `pageSize: Int = 20`, `limit: Int` (overrides `pageSize` when provided), `roleId: String`, `roleName: String` | `PaginatedUsersType!` | Page-based list of users. Requires read permission on `user` entity. `roleId` or `roleName` (mutually exclusive — `roleId` takes priority) filters to users assigned to that role. Use `roleName: "Assembly"` to get Assembly-role users for the Collected by Assembly dropdown. `limit` is a convenience alias for `pageSize`. Response: `items`, `total`, `skip`, `limit`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `getRoles` | `roleId: String` | `[RoleType!]!` | Get roles. If `roleId` is provided, returns that specific role. Otherwise returns all roles (just role table rows with all fields). Requires read permission on `role` entity. |
 | `getRolePermissions` | `roleId: String!` | `RoleWithPermissionsType` | Get role with all its entity and field permissions. Returns role, entityPermissions (list), and fieldPermissions (list). Requires read permission on `role` entity. |
 | `myPermissions` | — | `PermissionsType` | Current user's permissions grouped by role (`byRole`). `null` if not authenticated. |
@@ -506,14 +506,16 @@ All operations exposed by the schema:
 | `vendor` | `id: String!` | `VendorType` | Single vendor by id. `null` if not found. |
 | `products` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `categoryId: String`, `itemCodeContains: String`, `nameContains: String`, `descriptionContains: String`, `makeContains: String`, `puUnitId: String`, `stkUnitId: String`, `locationInStoreContains: String` | `ProductListType!` | Page-based products. All text filters are case-insensitive "contains". `puUnitId`/`stkUnitId` = exact UOM id match. Response: `items` (includes `unitPrice`), `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. |
 | `product` | `id: String!` | `ProductType` | Single product by id. Includes `itemCode`, `name`, `description`, `make`, `puUnitId`, `stkUnitId`, `procMtd`, `locationInStore`, `quantity`, `unitPrice`, `isActive`. `null` if not found. |
-| `purchaseOrders` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `poNumberContains: String`, `titleContains: String`, `poStatusContains: String` | `PurchaseOrderListType!` | Page-based paginated purchase orders with optional search. `poNumberContains` performs a case-insensitive partial match on `po_number` across **all pages** — use this for cross-page PO number search. `titleContains` filters on title, `poStatusContains` on status. **Role-based scoping:** users with roles `superadmin`, `Project Manager`, or `Operations Head` / `Operations Head (Owner)` see all POs; every other role sees only POs they created. Response includes `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. Each `PurchaseOrderType` item includes `fixtureId` (derived from line items) and `projectName` (resolved from `project_id`). |
-| `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. **Role-based scoping:** same rules as `purchaseOrders` — non-privileged users receive an error if the requested PO was not created by them. Includes `poNumber`, `title`, `poType`, `projectId`, `projectName`, `fixtureId`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments` (raw JSON string), `parsedAttachments` (typed list of `POAttachmentType`: `id`, `s3Key`, `filename`, `name`, `type`, `uploadedAt`), `poSendDate`, `poStatus` (`POStatusEnum`: `Created` | `CostingUpdated` | `Completed`), `costingUpdatedDate` (auto-set by `confirmCosting`), `completedDate` (auto-set when `poStatus` → `Completed`), `enableCosting` (bool, default `true` — when `false`, `parseCostingExcel` and `confirmCosting` raise "Costing is restricted"), `lineItems`, and audit fields (`createdAt`, `modifiedAt`, `createdBy`, `modifiedBy`). `fixtureId` is resolved from the first line item's `fixture_bom → fixture`. `projectName` is resolved from `project_id`. `lineItems` returns `PurchaseOrderLineItemType`. `purchaseUnitPrice` source depends on `poType`: `ManufacturedPart` → `fixture_bom.purchase_unit_price`; `StandardPart` → `products.unit_price` (via `fixture_bom.product_id`); `Miscellaneous` → `purchase_order_line_items.unit_price`. Own fields: `id`, `purchaseOrderId`, `fixtureBomId`, `description`, `expenseCategoryId`, `miscellaneousLineItemCost`, `unitPrice`, `orderedQuantity` (qty ordered in THIS PO for Standard Part POs; set by `createStandardPo`). Proxied from `fixture_bom`: `drawingNumber`, `bomDescription`, `quantity`, `status`, `lhRh`, `receivedQuantity`, `collectedByassemblyQuantity`, `collectedByUserId`, `collectedAt`. `lineItemsSummary` returns `PurchaseOrderLineItemsSummaryType` with `totalCost` (sum of all resolved `purchaseUnitPrice × quantity`) and `itemCount`. |
-| `purchaseOrdersByFixture` | `fixtureId: String!`, `poType: String = "StandardPart"`, `partIds: [String!]` | `[PurchaseOrderType!]!` | Returns non-deleted PurchaseOrders that contain at least one line item linked to the given fixture. Optional `partIds` (list of fixture_bom row IDs from `standardPartsForPo`) — when supplied, only POs that have at least one line item in the given set are returned. **UI usage:** call on popup open with the IDs of rows where `orderQty > 0` so the "Existing Open POs" section shows only POs relevant to the selected item codes. Each returned `PurchaseOrderType` includes full `lineItems` with `orderedQuantity`. Module: `project_management`. Role-scoped same as `purchaseOrders`. |
+| `purchaseOrders` | `page: Int = 1`, `pageSize: Int = 20` (max 200), `isActive: Boolean`, `poNumberContains: String`, `titleContains: String`, `poStatusContains: String` | `PurchaseOrderListType!` | Page-based paginated purchase orders with optional search. `poNumberContains` performs a case-insensitive partial match on `po_number` across **all pages** — use this for cross-page PO number search. `titleContains` filters on title, `poStatusContains` on status. **Role-based scoping:** users with roles `superadmin`, `Project Manager`, `Operations Head` / `Operations Head (Owner)`, `Store Keeper`, or `Inventory Manager(Store Keeper)` see all POs; every other role sees only POs they created. Response includes `items`, `total`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. Each `PurchaseOrderType` item includes `fixtureId` (derived from line items) and `projectName` (resolved from `project_id`). |
+| `purchaseOrder` | `id: String!` | `PurchaseOrderType` | Single purchase order by id. **Role-based scoping:** same full-view rules as `purchaseOrders` (`superadmin`, `Project Manager`, `Operations Head`, `Store Keeper`, `Inventory Manager(Store Keeper)`) — other roles receive an error if the requested PO was not created by them. Includes `poNumber`, `title`, `poType`, `projectId`, `projectName`, `fixtureId`, `details`, `vendorId`, `vendorName`, `supplierId`, `supplierName`, `attachments` (raw JSON string), `parsedAttachments` (typed list of `POAttachmentType`: `id`, `s3Key`, `filename`, `name`, `type`, `uploadedAt`), `poSendDate`, `poStatus` (`POStatusEnum`: `Created` | `CostingUpdated` | `Completed`), `costingUpdatedDate` (auto-set by `confirmCosting`), `completedDate` (auto-set when `poStatus` → `Completed`), `enableCosting` (bool, default `true` — when `false`, `parseCostingExcel` and `confirmCosting` raise "Costing is restricted"), `sendPoEnabled` (bool, default `true` — flag to control whether the PO can be sent to the vendor/supplier), `lineItems`, and audit fields (`createdAt`, `modifiedAt`, `createdBy`, `modifiedBy`). `fixtureId` is resolved from the first line item's `fixture_bom → fixture`. `projectName` is resolved from `project_id`. `lineItems` returns `PurchaseOrderLineItemType`. `purchaseUnitPrice` source depends on `poType`: `ManufacturedPart` → `fixture_bom.purchase_unit_price`; `StandardPart` → `products.unit_price` (via `fixture_bom.product_id`); `Miscellaneous` → `purchase_order_line_items.unit_price`. Own fields: `id`, `purchaseOrderId`, `fixtureBomId`, `description`, `expenseCategoryId`, `miscellaneousLineItemCost`, `unitPrice`, `orderedQuantity` (qty ordered in THIS PO for Standard Part POs; set by `createStandardPo`). Proxied from `fixture_bom`: `drawingNumber`, `bomDescription`, `quantity`, `status`, `lhRh`, `receivedQuantity`, `collectedByassemblyQuantity`, `collectedByUserId`, `collectedAt`. `lineItemsSummary` returns `PurchaseOrderLineItemsSummaryType` with `totalCost` (sum of all resolved `purchaseUnitPrice × quantity`) and `itemCount`. |
+| `purchaseOrdersByFixture` | `fixtureId: String!`, `poType: String = "StandardPart"`, `partIds: [String!]`, `excludeStatuses: [String!]` | `[PurchaseOrderType!]!` | Returns non-deleted PurchaseOrders that contain at least one line item linked to the given fixture. Optional `partIds` (list of fixture_bom row IDs from `standardPartsForPo`) — when supplied, only POs that have at least one line item in the given set are returned. Optional `excludeStatuses` — list of `poStatus` values to omit (e.g. `["Cancelled", "Closed"]`). **UI usage:** call on popup open with the IDs of rows where `orderQty > 0` so the "Existing Open POs" section shows only POs relevant to the selected item codes. Each returned `PurchaseOrderType` includes full `lineItems` with `orderedQuantity`. Module: `project_management`. Role-scoped same as `purchaseOrders`. |
 | `standardPartsForPo` | `fixtureId: String!` | `[StandardPartForPoType!]!` | Returns standard-part rows for the **Create Supplier PO popup**. Each row includes `id` (fixture BOM row id, used as `partId` in `createStandardPo`), `itemCode`, `productName`, `productMake`, `uom`, `lhRh`, `expectedQty` (BOM quantity), `currentStock` (latest from Product master), `openOrderQty` (sum of `ordered_quantity` from all non-deleted, non-Completed POs for this part), `orderQty` = `max(0, expectedQty - currentStock - openOrderQty)` (auto-calculated, read-only — the quantity for this PO), `purchaseUnitPrice`, `supplierId`, `supplierName`. **`orderQty`** is the auto-calculated order quantity; rows where `orderQty <= 0` are shown red and skipped. **`openOrderQty`** shows the total already ordered on open POs. User does NOT edit quantities — just selects a Supplier and submits. The UI calls this on popup open **and** again before submit for freshness. Module: `project_management`. Requires `fixture_bom.read`. |
 | `exportPurchaseOrderLineItemsXlsx`, `getPurchaseOrderAttachmentUploadUrl` | `id: String!` | `PoExcelExportType` (`s3Key`, `downloadUrl`) | Export the line items of a purchase order to an XLSX file on S3; returns a presigned download URL. |
 | `exportCollectByAssemblyExcel` | `fixtureBomIds: [String!]!`, `collectedByUserId: String!` | `CollectByAssemblyResultType` (`s3Key`, `downloadUrl`) | Generate an Excel of assembly-collected BOM items (both manufactured and standard) with assembly user first/last name. Returns presigned S3 URL valid 1 hour. Requires `fixture_bom.read`. |
 | `getPurchaseOrderAttachmentUploadUrl` | `poId: String!`, `filename: String!` | `PurchaseOrderAttachmentUploadUrlType` | Get a presigned URL for uploading a generic attachment to a purchase order. Returns `uploadUrl`, `s3Key`, and `poId`. **For Standard Part POs**, only Excel (`.xlsx`, `.xls`), PDF (`.pdf`), CSV (`.csv`), and image (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tiff`) files are permitted; other extensions return a `GraphQLError`. |
 | `getPurchaseOrderAttachmentDownloadUrl` | `s3Key: String!` | `POAttachmentDownloadUrlType` | Get a presigned download URL for any PO attachment given its S3 key (from `parsedAttachments.s3Key`). Returns `downloadUrl`, `s3Key`, `filename`. In dev/fake-S3 mode returns a `/fake-s3-download` URL. Requires `master_data` module. |
+| `getInvoicePhotoUploadUrl` | `eventId: String!`, `filename: String!` | `InvoicePhotoUploadUrlType` | Step 1 of the invoice-photo upload flow. Validates that the event exists and the file is an image (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tiff`). Returns `{ eventId, s3Key, uploadUrl }`. Frontend PUTs the image to `uploadUrl`, then calls `setInvoicePhotoS3Key`. S3 key pattern: `invoice-photos/{eventId}/{ts}_{filename}`. Requires `fixture_bom.update` + module `master_data`. |
+| `getInvoicePhotoDownloadUrl` | `eventId: String!` | `InvoicePhotoDownloadUrlType` (nullable) | Returns a presigned GET URL for the invoice photo stored on the event. Returns `null` when no photo has been attached yet. Returns `{ eventId, s3Key, downloadUrl }`. In dev/fake-S3 mode returns a `/fake-s3-download` URL. Requires `fixture_bom.read` + module `master_data`. |
 | `auditLogs` | `page: Int = 1`, `pageSize: Int = 20`, `userId: String`, `userNameContains: String`, `action: String`, `entityName: String`, `entityId: String`, `requestId: String`, `source: String`, `fieldName: String`, `oldValueContains: String`, `newValueContains: String`, `fromDate: String`, `toDate: String` | `AuditLogListType!` | Paginated audit trail. Returns field-level change history with request context (IP, user agent, source, request correlation ID). Permission: `audit_log.read`. Response: `items`, `total`, `skip`, `limit`, `page`, `totalPages`, `hasMore`, `firstPage`, `lastPage`. See [Audit Trail](#audit-trail) section. |
 
 `isActive` behavior for all Master Data list queries:
@@ -546,15 +548,16 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `project` | `id: String!` | `ProjectType` | Single project by id. Fields: `id`, `projectNumber`, `name`, `customerId`, `customerName`, `description`, `status`, `startDate`, `targetDate`, `actualDeliveryDate`, `budget`, `purchaseBudget`, `designerTargetDate`, `procurementTargetDate`, `manufacturingTargetDate`, `qualityTargetDate`, `assemblyTargetDate`, `isActive`, `remainingDays`, audit fields. `null` if not found. |
 | `projectAssignments` | `projectId: String!` | `[ProjectAssignmentType!]!` | List assignments for a project. Requires `read` permission on `project_assignment`. |
 | `projectAssignmentBoard` | `projectId: String!` | `ProjectAssignmentBoardType` | Assignment screen payload (project, assignments, assignable users/roles, canAssign). Requires `update` permission on `project_assignment`. |
-| `fixtures` | `projectId: String`, `status: String`, `isActive: Boolean`, `skip: Int = 0`, `limit: Int = 100` | `FixtureListType!` | Paginated fixtures (`items`, `total`, `skip`, `limit`). Item fields: `id`, `projectId`, `fixtureNumber`, `fixtureSeq`, `description`, `status`, `s3BomKey`, `bomFilename`, `bomUploadedAt`, `bomUploadedBy`, `isActive`, `assemblyUserId`, `assemblyUserName`, `assemblyReceivedQuantity`, audit fields. |
+| `fixtures` | `projectId: String`, `stage: String`, `isActive: Boolean`, `skip: Int = 0`, `limit: Int = 100` | `FixtureListType!` | Paginated fixtures (`items`, `total`, `skip`, `limit`). Item fields: `id`, `projectId`, `fixtureNumber`, `fixtureSeq`, `description`, `stage`, `s3BomKey`, `bomFilename`, `bomUploadedAt`, `bomUploadedBy`, `isActive`, `assemblyUserId`, `assemblyUserName`, `assemblyReceivedQuantity`, stage timestamps (`stageBomUploadedAt`, `stageMfgPurchaseStartedAt`, `stageAssemblyCompletedAt`, `stageCmmCompletedAt`, `stageDispatchAt`), milestone timestamps (`mfgPurchaseCompletedAt`, `assemblyStartedAt`), `stageInfo` (list of `FixtureStageInfoType`: `stage`, `label`, `displayStatus` = `completed`\|`current`\|`pending`, `enteredAt`), audit fields. **Stage values:** `bom_uploaded` → `manufacturing_purchase` → `assembly` → `cmm` → `dispatch`. Stages advance via business events or manual role-specific buttons; not user-settable via `updateFixture`. |
 | `fixture` | `id: String!` | `FixtureType` | Single fixture by id. Same fields as list item. `null` if not found. |
-| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String`, `pendingDateFrom: DateTime`, `pendingDateTo: DateTime`, `inprogressDateFrom: DateTime`, `inprogressDateTo: DateTime`, `qcDateFrom: DateTime`, `qcDateTo: DateTime`, `receivedDateFrom: DateTime`, `receivedDateTo: DateTime` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). **Persistence:** both lists are backed by the unified table **`fixture_bom`** (`part_type` = `manufactured` \| `standard`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. Text filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part itemCode/name/make. **Status date range filters** (`pendingDateFrom/To`, `inprogressDateFrom/To`, `qcDateFrom/To`, `receivedDateFrom/To`) filter manufactured parts by their status date — a part is included only if its date is set and falls within the supplied range (both bounds inclusive). `null` if fixture not found. **Status date fields on manufactured parts:** `pendingAt`, `inprogressAt`, `qualityCheckedAt`, `receivedAt` — each is `null` until that status is first entered; once set it is never overwritten. **Assembly collection fields (both `BomManufacturedPartType` and `FixtureProductType`):** `collectedByassemblyQuantity` (cumulative collected qty), `collectedByUserId` (last assembly user), `collectedAt` (last collection timestamp) — set via `collectByAssembly` mutation. |
+| `bomView` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String`, `pendingDateFrom: DateTime`, `pendingDateTo: DateTime`, `inprogressDateFrom: DateTime`, `inprogressDateTo: DateTime`, `qcDateFrom: DateTime`, `qcDateTo: DateTime`, `receivedDateFrom: DateTime`, `receivedDateTo: DateTime` | `BomViewType` | Full BOM view for a fixture, with optional search filters. Returns `fixture`, `manufacturedParts` (list of `BomManufacturedPartType`), and `standardParts` (list of `FixtureProductType`). **Persistence:** both lists are backed by the unified table **`fixture_bom`** (`part_type` = `manufactured` \| `standard`). Standard parts include `qty` (expected from BOM), `currentStock` (from Product master), `purchaseQty` = `max(0, qty − currentStock)`. Text filters are applied as case-insensitive "contains" matches on drawing number/description and standard-part itemCode/name/make. **Status date range filters** (`pendingDateFrom/To`, `inprogressDateFrom/To`, `qcDateFrom/To`, `receivedDateFrom/To`) filter manufactured parts by their status date — a part is included only if its date is set and falls within the supplied range (both bounds inclusive). `null` if fixture not found. **Status date fields on manufactured parts:** `pendingAt`, `inprogressAt`, `qualityCheckedAt`, `receivedAt` — each is `null` until that status is first entered; once set it is never overwritten. **Assembly collection fields (both `BomManufacturedPartType` and `FixtureProductType`):** `collectedByassemblyQuantity` (cumulative collected qty), `collectedByUserId` (last assembly user), `collectedAt` (last collection timestamp) — set via `collectByAssembly` mutation. **`receivedQuantity`** is now also exposed on `FixtureProductType` (standard parts) — incremented by `markBomPartsReceived`, which also increments `products.quantity` (product master stock) for standard parts. |
 | `getDesignUploadUrl` | `fixtureId: String!`, `filename: String!` | `DesignUploadUrlType` | Get a presigned S3 upload URL for a BOM file (`.xlsx` or `.zip`). Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the file bytes to `uploadUrl` before calling `parseBomFile`. |
 | `parseBomFile` | `fixtureId: String!`, `s3Key: String!` | `BomParseResultType` | **Fixture-level.** Parse a previously uploaded BOM ZIP (preview only — no DB write). Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `errors`, `warnings`, `summary`. **ZIP layout:** BOM.xlsx header column accepted as `"Drawing No."`, `"Drawing No"`, or `"Drawing Number"`. **Excel is source of truth:** for each manufactured part, description, qty, and lhRh are taken from the BOM Excel row. PDF directories inside the ZIP validate existence. **`errors`** — Excel manufactured rows with no matching PDF directory in the ZIP (excluded from `manufacturedParts`, blocking). **`warnings`** — drawings found in ZIP PDF directories but absent from the BOM Excel; these are included in `manufacturedParts` using PDF-parsed values and flagged for review (non-blocking). **Qty fallback:** if Excel qty cell is blank/null, the PDF-parsed qty is used instead. `lhRh` is sourced from the Excel row. Each manufactured part includes `source` (`"pdf"`), `hasDrawing: true`. **Re-upload diff detection:** each parsed row is compared against the DB by `(drawingNumber, partType)`. Parts get `changeStatus` (`"changed"` \| `"unchanged"` \| `"new"` \| `null`), `changes` (list of `BomFieldChangeType {field, oldValue, newValue}`), `existingStatus`, `existingRowId`, `existingQty`, `drawingFileChanged`. Summary fields: `totalManufactured`, `totalStandard`, `wrongEntryCount`, `errorCount`, `warningCount`, `duplicateDrawingCount`, `fixtureMismatchCount`, `changedCount`, `unchangedCount`, `newCount`, `notUpdatableCount`. |
 | `getDrawingViewUrl` | `partId: String!` | `DrawingViewUrlType` | Get a presigned GET URL to view/download a manufactured part's drawing file. Returns `viewUrl`, `partId`, `drawingNo`. Raises error if part has no drawing. |
 | `getProjectBomUploadUrl` | `projectId: String!`, `filename: String!` | `ProjectBomUploadUrlType` | **Project-level.** Get a presigned S3 upload URL for a BOM file scoped to a project (no fixture needed). Returns `uploadUrl`, `s3Key`, `projectId`. PUT the file bytes to `uploadUrl`, then call `parseProjectBomFile`. |
 | `parseProjectBomFile` | `projectId: String!`, `s3Key: String!` | `BomParseResultType` | **Project-level (preferred).** Parse BOM ZIP — same parsing rules as `parseBomFile`. **Excel is source of truth** for manufactured part description, qty, and lhRh; PDF directories validate existence. Returns `manufacturedParts`, `standardParts`, `wrongEntries`, `errors` (Excel rows with no PDF directory — blocking), `warnings` (PDF-only drawings not in Excel — non-blocking, included with PDF-parsed values). Fixture sequences are derived from drawing numbers. Each manufactured part includes `fixtureSeq`, `fixtureExists`, `existingFixtureId`, `existingFixtureNumber`, `isDuplicateInProject`, `duplicateFixtures`, `source` (`"pdf"`). Each standard part includes `fixtureSeq` (from Excel unit header). Summary includes `bomFixtureSeq`, `duplicateDrawingCount`, `fixtureMismatchCount`, `newFixtureSeqs`, `existingFixtureSeqs`, `errorCount`, `warningCount`. No DB writes. |
 | `getManufacturedPoUploadUrl` | `fixtureId: String!`, `filename: String!` | `ManufacturedPoUploadUrlType` | Phase 4. Get a presigned S3 upload URL for a **user-edited manufactured PO Excel**. Returns `uploadUrl`, `s3Key`, `fixtureId`. PUT the edited Excel bytes to `uploadUrl`, then call `importManufacturedPoExcel(fixtureId, s3Key)`. |
+| `bomQtyHistory` | `drawingNumber: String`, `fixtureBomId: String`, `itemCode: String`, `kind: String`, `skip: Int = 0`, `limit: Int = 25` | `BomQtyEventListType` | Paginated receive/collect event history for BOM fixture line items. **Default limit: 25** (last 25 events per drawing/item). Filter by `drawingNumber` (exact match, denormalized), `itemCode` (alias for `drawingNumber` — use for standard parts), `fixtureBomId` (scope to a single BOM row), and/or `kind` (`"receive"` \| `"collect"`). Results ordered newest-first. Each row includes `id`, `fixtureBomId`, `drawingNumber`, `kind`, `qty` (delta — can be negative for stock reductions), `performedByUserId`, `performedByUserName`, `performedAt`, `note`, `collectionConfirmedByAssembly` (bool), `confirmedByUserId`, `confirmedByUserName`, `confirmedAt`, **`purchaseOrderId`** (FK to PO — set on receive events), **`invoiceNumber`** (supplier invoice/challan — set on receive events), **`invoicePhotoS3Key`** (S3 key if a photo was uploaded), **`invoicePhotoDownloadUrl`** (presigned GET URL — `null` when no photo attached; generated inline per event), `createdBy`, `createdAt`, **`itemCode`** (product item code), **`productName`**, **`currentStock`** (live product.quantity), **`partType`** (`"standard"` \| `"manufactured"`), **`fixtureName`** (fixture number). Requires `fixture_bom.read`. Module: `master_data`. |
 
 **Email store (module: core; requires auth).**
 
@@ -568,7 +571,7 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 
 | Mutation | Arguments | Returns | Description |
 |----------|-----------|---------|-------------|
-| `login` | `username: String!`, `password: String!` | `LoginResponseType` | Authenticate by username/password. Returns `accessToken`, `refreshToken`, `user` (LoginUserType), `permissions` (byRole), `tokenType`. Returns `null` on invalid credentials or inactive user. No auth required. |
+| `login` | `username: String!`, `password: String!` | `LoginResponseType` | Authenticate by username/password. Returns `accessToken`, `refreshToken`, `user` (LoginUserType), `permissions` (byRole), `tokenType`. Raises a GraphQL error on failure: `"Invalid username or password."` for bad credentials, `"Account is disabled. Please contact your administrator."` for inactive accounts. No auth required. |
 | `refresh` | `refreshToken: String!` | `TokenType` | Issue a new access token. Returns `accessToken`, `tokenType`. Returns `null` if refresh token invalid or revoked. No auth required. |
 | `createUser` | `firstName: String!`, `lastName: String!`, `username: String!`, `password: String!`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String` | `UserType` | Create a user. If an `employee` role exists it is assigned automatically; otherwise the user is created with no roles. Optional: dateOfBirth, mobileNumber, email. **Requires authentication** and create permission on `user` entity. Current user is set as `createdBy`. |
 | `updateUser` | `userId: String!`, `firstName: String`, `lastName: String`, `dateOfBirth: Date`, `mobileNumber: String`, `email: String`, `isActive: Boolean` | `UserType` | Update a user by id. All args except userId optional. Respects field-level write permissions. Requires update permission on `user` entity. Current user is set as `modifiedBy`. |
@@ -616,10 +619,10 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `updateVendor` | `id: String!`, `input: VendorInput!` | `VendorType` | Update vendor by id. |
 | `deleteVendor` | `id: String!` | `Boolean!` | Delete vendor by id. |
 | `createProduct` | `input: ProductInput!` (name, categoryId, **itemCode**, description, make, **puUnitId**, **stkUnitId**, **procMtd**, **locationInStore**, quantity, isActive) | `ProductType` | Create product. **itemCode** replaces legacy part number; purchase/stock UOM are **puUnitId** and **stkUnitId** (both optional). |
-| `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id (same fields as create). |
+| `updateProduct` | `id: String!`, `input: ProductInput!` | `ProductType` | Update product by id (same fields as create). **Side-effect when `quantity` changes:** for every active standard BOM row linked to this product (`fixture_bom.product_id = product.id`, `part_type = standard`), inserts a `fixture_bom_qty_events` row with `kind=receive`, `note="Stock Updated from Product Master"`, `qty=delta` (new − old). Delta can be negative (stock reduction). No event inserted if quantity is unchanged or not provided. |
 | `deleteProduct` | `id: String!` | `Boolean!` | Delete product by id. |
 | `createPurchaseOrder` | `input: PurchaseOrderInput!` (title, `poType`=StandardPart|ManufacturedPart|Miscellaneous, projectId, details, vendorId, supplierId, attachments, poSendDate, `poStatus`=Created|CostingUpdated|Completed (default `Created`), `enableCosting` (default `true`), isActive, `lineItems`, `lineItemIds`) | `PurchaseOrderType` | Create purchase order header. `poNumber` is auto-generated by backend in format `POYYMMDDNN`. `poStatus` defaults to `Created`. `enableCosting` defaults to `true` for `ManufacturedPart`; **always forced to `false` for `StandardPart` and `Miscellaneous`** regardless of input. Can accept `lineItemIds` or complex `lineItems` (`fixtureBomId`, `description`, `expenseCategoryId`, `miscellaneousLineItemCost`, `purchaseUnitPrice`). |
-| `updatePurchaseOrder` | `id: String!`, `input: PurchaseOrderUpdateInput!` | `PurchaseOrderType` | Partial update purchase order by id (only provided fields are updated). Supports `attachmentsToAdd` / `attachmentsToRemove` to modify the stored attachments list. Supports `enableCosting` (bool) to toggle costing restriction. Can also update `projectId`, and replace `lineItems` or `lineItemIds`. When `poStatus` is set to `Completed`, `completedDate` is auto-stamped (only on first transition). When `lineItems` includes `purchaseUnitPrice`, the price is written back to the source table: `StandardPart` → `products.unit_price`; `ManufacturedPart` → `fixture_bom.purchase_unit_price`; `Miscellaneous` → `line_item.unit_price`. When `lineItems` includes `receivedQuantity`, it is written to `fixture_bom.received_quantity` for all PO types. |
+| `updatePurchaseOrder` | `id: String!`, `input: PurchaseOrderUpdateInput!` | `PurchaseOrderType` | Partial update purchase order by id (only provided fields are updated). Supports `attachmentsToAdd` / `attachmentsToRemove` to modify the stored attachments list. Supports `enableCosting` (bool) to toggle costing restriction. Supports `sendPoEnabled` (bool) to toggle whether the PO can be sent to the vendor/supplier. Can also update `projectId`, and replace `lineItems` or `lineItemIds`. When `poStatus` is set to `Completed`, `completedDate` is auto-stamped (only on first transition). When `lineItems` includes `purchaseUnitPrice`, the price is written back to the source table: `StandardPart` → `products.unit_price`; `ManufacturedPart` → `fixture_bom.purchase_unit_price`; `Miscellaneous` → `line_item.unit_price`. When `lineItems` includes `receivedQuantity`, it is written to `fixture_bom.received_quantity` for all PO types. |
 | `deletePurchaseOrder` | `id: String!` | `Boolean!` | Delete purchase order by id. |
 
 **Project Management & Design/BOM (module: project_management; requires `project_management` enabled. All require auth + entity-level permissions.)**
@@ -631,9 +634,13 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `deleteProject` | `id: String!`, `softDelete: Boolean = true` | `Boolean!` | Soft/hard delete project by id. |
 | `assignProjectPrincipal` | `input: ProjectAssignmentInput!` (projectId, principalType=`user\|role`, principalId, accessLevel) | `ProjectAssignmentType` | Assign project to a user or role. Requires `update` permission on `project_assignment`. |
 | `removeProjectPrincipal` | `projectId: String!`, `principalType: String!`, `principalId: String!` | `Boolean!` | Remove a user/role assignment from project. Requires `update` permission on `project_assignment`. |
-| `createFixture` | `input: CreateFixtureInput!` (projectId, description, status) | `FixtureType` | Create a fixture under a project. `fixtureNumber` and `fixtureSeq` are auto-generated from `project.projectNumber`. Requires `project.projectNumber` to be set. |
-| `updateFixture` | `id: String!`, `input: UpdateFixtureInput!` (description, status, isActive) | `FixtureType` | Update fixture description, status, or active flag. |
+| `createFixture` | `input: CreateFixtureInput!` (projectId, description) | `FixtureType` | Create a fixture under a project. `fixtureNumber` and `fixtureSeq` are auto-generated from `project.projectNumber`. Stage defaults to `bom_uploaded` with `stageBomUploadedAt` timestamp. Requires `project.projectNumber` to be set. |
+| `updateFixture` | `id: String!`, `input: UpdateFixtureInput!` (description, isActive) | `FixtureType` | Update fixture description or active flag. Stage is not settable here (event-driven). |
 | `deleteFixture` | `id: String!` | `Boolean!` | Hard delete a fixture and all its BOM parts. |
+| `markAssemblyComplete` | `fixtureId: ID!` | `FixtureType!` | Advance fixture stage from `manufacturing_purchase` → `assembly`. Sets `stageAssemblyCompletedAt`. Requires the calling user to have the **Assembly** (or Assembly Team) role. Raises error if fixture is not at `manufacturing_purchase` stage. |
+| `markCmmComplete` | `fixtureId: ID!` | `FixtureType!` | Advance fixture stage from `assembly` → `cmm`. Sets `stageCmmCompletedAt`. Requires the calling user to have the **CMM** (or CMM Operators) role. Raises error if fixture is not at `assembly` stage. |
+| `markDispatchComplete` | `fixtureId: ID!` | `FixtureType!` | Advance fixture stage from `cmm` → `dispatch`. Sets `stageDispatchAt`. Requires the calling user to have the **Dispatch** (or Superadmin) role. Raises error if fixture is not at `cmm` stage. |
+| `forceFixtureStage` | `fixtureId: ID!`, `stage: String!` | `FixtureType!` | Manual override to set fixture to any valid stage (forward or backward). Requires `fixture:update` permission. Audit-logged with `forced: true`. Valid stages: `bom_uploaded`, `manufacturing_purchase`, `assembly`, `cmm`, `dispatch`. |
 | `submitBomUpload` | `input: BomSubmitInput!` (fixtureId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?, quantityCorrections?) | `FixtureType` | **Fixture-level.** Commit a parsed BOM ZIP to a specific fixture. **First upload:** atomically replaces all BOM rows (delete-all + insert); stores SHA-256 hash of each drawing file in `drawing_file_hash`. **Re-upload (fixture already has BOM rows):** updates existing rows in-place — only manufactured rows in `pending` status are updated; non-pending rows are skipped. **Quantity preservation:** on re-upload, DB quantity is always preserved (parsed quantity is ignored); only explicit `quantityCorrections` from the user override it. **Drawing file detection:** drawing files are compared by SHA-256 hash; changed drawings are re-uploaded to S3 and the hash is updated. All field changes and drawing file changes are recorded in the audit log. New drawings or standard parts not already in the fixture are rejected with an error (must use a new fixture upload). Rows in DB not present in the upload are left untouched (partial re-upload is safe). Manufactured parts come from PDF drawings in unit directories; standard parts from BOM.xlsx. Uploads drawing files from ZIP to S3. Standard part resolution (first upload only): (1) `productMatchResolutions` UUID, (2) lookup by `item_code`, (3) skip if not found. `quantityCorrections`: list of `{drawingNo, qty}` — on first upload, overrides parsed qty; on re-upload, overrides DB qty (the only way to change quantity on re-upload). |
 | `submitProjectBomUpload` | `input: ProjectBomSubmitInput!` (projectId, s3Key, filename, wrongEntryResolutions?, productMatchResolutions?, quantityCorrections?) | `[FixtureType!]!` | **Project-level (preferred).** Commit a parsed BOM ZIP to the project. Manufactured parts from PDF drawings, standard parts from BOM.xlsx. Fixtures are auto-created/matched from fixture sequences in drawing numbers. Duplicate drawings (already committed) are skipped. Same standard part resolution and `quantityCorrections` as `submitBomUpload`. Returns the list of affected fixtures. |
 | `sendManufacturedToVendor` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `EmailType` | Phase 3. Create an Email record + attachments snapshot (Excel + copied drawings) for selected manufactured parts, and sets `vendorId` on those parts. |
@@ -642,13 +649,16 @@ All arguments below are optional unless noted. Omit them or pass `null` to apply
 | `createManufacturedPo` | `fixtureId: String!`, `partIds: [String!]!`, `vendorId: String!` | `PurchaseOrderType` | Phase 4. Create a **`purchase_orders`** row (`poType = ManufacturedPart`, `projectId` auto-set from fixture) from **`fixture_bom` row ids** (`partIds`; each `part_type = manufactured`). Sets `vendorId` on rows and `status = inprogress` (pending-only). No Excel generated — user uploads their own attachment separately. |
 | `updateManufacturedStatusBulk` | `fixtureId: String!`, `partIds: [String!]!`, `status: String!` | `Int!` | Phase 5. Bulk status update for manufactured parts in a **single fixture**. Allowed transitions only: `inprogress -> quality_checked`, `quality_checked -> received`. Returns number of updated parts. |
 | `updateManufacturedQty` | `partId: String!`, `qty: Float!` | `BomManufacturedPartType` | Inline qty edit for a manufactured part. Allowed **only when `status = pending`**. Raises error if part not found or status is not pending. Requires `fixture_bom.update` permission. |
-| `updateManufacturedReceivedQty` | `partId: String!`, `receivedQty: Float` | `BomManufacturedPartType` | Phase 5. Stock keeper updates received quantity on a BOM fixture (`fixture_bom.received_quantity`). Allowed only when current status is `quality_checked` or `received`. Requires `fixture_bom.update` permission. Module: `project_management`. |
+| `updateManufacturedReceivedQty` | `partId: String!`, `receivedQty: Float` | `BomManufacturedPartType` | Phase 5. Stock keeper updates received quantity on a BOM fixture (`fixture_bom.received_quantity`). Allowed only when current status is `quality_checked` or `received`. **Side-effect:** auto-inserts a `fixture_bom_qty_events` row with `kind=receive`, `note="Received at Store"`, `qty=delta` (new minus old). Requires `fixture_bom.update` permission. Module: `project_management`. |
 | `updateStandardPartPurchaseUnitPrice` | `standardPartId: String!`, `purchaseUnitPrice: Float` | `FixtureProductType` | Phase 6. Inline edit: update `purchaseUnitPrice` for a **standard** row in unified table **`fixture_bom`** (`part_type = standard`). |
 | `exportStandardPoExcel` | `fixtureId: String!`, `partIds: [String!]!` | `PoExcelExportType` | Phase 6. Export Standard Parts PO Excel from **`fixture_bom` row ids** (`partIds` = primary keys; each row must have `part_type = standard`). Excel includes: itemCode, description, make, unit, expectedQty, currentStock, purchaseQty (calculated), purchaseUnitPrice, supplierName. |
 | `createStandardPo` | `fixtureId: String!`, `parts: [StandardPoPartInput!]!`, `supplierId: String!` | `PurchaseOrderType` | Phase 6. Create a **`purchase_orders`** row (`poType = StandardPart`, `projectId` auto-set from fixture). `parts` is a list of `{partId: String!, orderedQty: Float!}` where `partId` is the `fixture_bom` row id (`part_type = standard`) and `orderedQty` is the quantity being ordered in this PO. **Validation:** for each part, `sum(orderedQuantity across existing non-Completed POs) + orderedQty ≤ purchaseQty (= max(0, bom.quantity − product.quantity))` — raises error with part drawing number and amounts if exceeded. Stores `orderedQuantity` on each `PurchaseOrderLineItem`. Sets `supplierId` on the selected BOM rows. |
 | `receiveStandardParts` | `receipts: [StandardPartReceiptInput!]!` (productId, receivedQty) | `Int!` | Phase 6. Store receiving: increments `products.quantity += receivedQty` for each receipt entry. Requires `product.update`. Returns number of updated products. |
-| `markBomPartsReceived` | `items: [BomReceiveItemInput!]!` (fixtureBomId, receivedQty) | `Int!` | **BOM tree — Mark as Received.** Increments `fixture_bom.received_quantity` per item. For standard parts also increments `products.quantity`. **Validation:** `existing_received + receivedQty` must not exceed `fixture_bom.quantity` (ordered qty) — raises error with part name and amounts if exceeded. Requires `fixture_bom.update`. Returns count updated. |
-| `collectByAssembly` | `collectedByUserId: String!`, `items: [CollectByAssemblyItemInput!]!` (fixtureBomId, collectedQuantity) | `CollectByAssemblyResultType` (`s3Key`, `downloadUrl`) | **Collected by Assembly** action. Increments `fixture_bom.collected_byassembly_quantity` (cumulative). **Validation:** `existing_collected + collectedQuantity` must not exceed `received_quantity` (manufactured parts) or `quantity` (standard parts) — raises error if exceeded. For standard parts decrements `products.quantity`. Generates Excel download URL with assembly user name. Requires `fixture_bom.update`. |
+| `markBomPartsReceived` | `items: [BomReceiveItemInput!]!` (fixtureBomId, receivedQty, purchaseOrderId?, invoiceNumber?) | `BomPartsReceivedResultType!` | **BOM tree — Mark as Received.** Works for **both manufactured and standard parts**. Increments `fixture_bom.received_quantity` per item. For standard parts also increments `products.quantity` (product master stock — goods arriving into store). **Validation:** `existing_received + receivedQty` must not exceed `fixture_bom.quantity` (ordered qty) — raises error with part name and amounts if exceeded. **Side-effect:** auto-inserts a `fixture_bom_qty_events` row per item with `kind=receive`, `note="Received at Store"`, and the supplied `purchaseOrderId` / `invoiceNumber` (both optional). Returns `{ count, events }` — `events` contains the created `BomQtyEventType` rows including `id` (use as `eventId` for `getInvoicePhotoUploadUrl`). Requires `fixture_bom.update`. |
+| `collectByAssembly` | `collectedByUserId: String!`, `items: [CollectByAssemblyItemInput!]!` (fixtureBomId, collectedQuantity) | `CollectByAssemblyResultType` (`s3Key`, `downloadUrl`) | **Collected by Assembly** action. Increments `fixture_bom.collected_byassembly_quantity` (cumulative). **Validation:** `existing_collected + collectedQuantity` must not exceed `received_quantity` (manufactured parts) or `quantity` (standard parts) — raises error if exceeded. For standard parts decrements `products.quantity`. **Side-effect:** auto-inserts a `fixture_bom_qty_events` row per item with `kind=collect`, `note="Collected by Assembly"`. Generates Excel download URL with assembly user name. Requires `fixture_bom.update`. |
+| `createBomQtyEvent` | `input: CreateBomQtyEventInput!` (fixtureBomId, kind, qty, performedByUserId, note, performedAt?, purchaseOrderId?, invoiceNumber?) | `BomQtyEventType` | Manually record a receive or collect quantity event (e.g. corrections). Also increments the corresponding running total on `fixture_bom` (`received_quantity` for `receive`, `collected_byassembly_quantity` for `collect`). `note` must be one of `RECEIVED_AT_STORE`, `COLLECTED_BY_ASSEMBLY`, `MANUAL_ADJUSTMENT`, `STOCK_UPDATED_FROM_PRODUCT_MASTER`. `performedAt` defaults to now. For `receive` events, optionally supply `purchaseOrderId` and `invoiceNumber` to link the event to a PO and supplier invoice. Requires `fixture_bom.update`. Module: `master_data`. |
+| `confirmBomQtyCollection` | `eventId: String!`, `confirmedByUserId: String!` | `BomQtyEventType` | Assembly user marks a **collect** event as physically collected. Sets `collectionConfirmedByAssembly=true`, `confirmedByUserId`, `confirmedAt`. Only `kind=collect` events can be confirmed — raises error for receive events. **Idempotent:** confirming an already-confirmed event returns the current state unchanged. Requires `fixture_bom.update`. Module: `master_data`. |
+| `setInvoicePhotoS3Key` | `eventId: String!`, `s3Key: String!` | `BomQtyEventType` | Step 2 of the invoice-photo upload flow. Saves the S3 key returned by `getInvoicePhotoUploadUrl` on the event row after the frontend has successfully PUT the image. Replaces any previously stored key — one photo per event. Returns the updated event (including `invoicePhotoS3Key`). Requires `fixture_bom.update` + module `master_data`. |
 | `parseCostingExcel` | `poId: String!`, `fileBase64: String!`, `filename: String!` | `CostingPreviewType` | Step 1 of Costing flow. Accepts a base64-encoded XLSX in SHINEROBO Costing Master Sheet format. Reads the `Costing` sheet (headers in row 2, data from row 3). Columns used: `Drawing No.`, `Qty LH`, `Qty RH`, `Total cost`. Uploads the file to S3 under `costing/{poId}/...` and returns a preview of matched/unmatched rows — each row includes `qtyLh`, `qtyRh`, `quantityMismatch` (true when `Qty LH + Qty RH ≠ fixture_bom.quantity`). Requires `purchase_order.update`. |
 | `confirmCosting` | `poId: String!`, `s3Key: String!` | `ConfirmCostingResultType` | Step 2 of Costing flow. Re-parses the XLSX from S3. Validates that `Qty LH + Qty RH == fixture_bom.quantity` for all matched drawings — raises an error listing all mismatches if any are found. If all quantities match, bulk-updates `fixture_bom.purchase_unit_price` from the `Total cost` column, appends the Excel as a `costing` attachment to the PO, sets `po_status = "CostingUpdated"` + `costing_updated_date = now()`, and **automatically sets `enable_costing = false`** to prevent further costing uploads. Returns `poId` + `updatedCount`. Requires `purchase_order.update`. |
 | `exportBomViewExcel` | `fixtureId: String!`, `drawingNoContains: String`, `drawingDescriptionContains: String`, `standardPartItemCodeContains: String`, `standardPartNameContains: String`, `standardPartMakeContains: String`, `pendingDateFrom: DateTime`, `pendingDateTo: DateTime`, `inprogressDateFrom: DateTime`, `inprogressDateTo: DateTime`, `qcDateFrom: DateTime`, `qcDateTo: DateTime`, `receivedDateFrom: DateTime`, `receivedDateTo: DateTime` | `PoExcelExportType` | Export the current `bomView` dataset into an Excel file with **three sheets**: `Fixture Summary` (fixture metadata including `Assembly User ID`, `Assembly User`, `Assembly Received Quantity`), `Manufactured Parts`, and `Standard Parts`. Accepts the same filters as `bomView`. Returns `s3Key` + `downloadUrl`. |
@@ -892,7 +902,7 @@ query ListPurchaseOrders(
     poStatusContains: $poStatusContains
   ) {
     items {
-      id poNumber title poType poStatus enableCosting
+      id poNumber title poType poStatus enableCosting sendPoEnabled
       vendorId vendorName supplierId supplierName
       projectId projectName fixtureId
       poSendDate costingUpdatedDate completedDate
@@ -1003,6 +1013,10 @@ query BomView(
       currentStock  # Product.quantity from product master
       purchaseQty   # max(0, qty - currentStock) — how many to procure
       purchaseUnitPrice
+      receivedQuantity              # cumulative received qty (fixture_bom.received_quantity)
+      collectedByassemblyQuantity   # cumulative collected qty
+      collectedByUserId
+      collectedAt
     }
   }
 }
@@ -1522,8 +1536,9 @@ query ListEmails {
 # Pass partIds = IDs of selected rows (where orderQty > 0 from standardPartsForPo).
 # Only POs containing at least one of those item codes are returned.
 # If no PO exists for any of the selected items, returns an empty list.
-query PurchaseOrdersByFixture($fixtureId: String!, $partIds: [String!]) {
-  purchaseOrdersByFixture(fixtureId: $fixtureId, poType: "StandardPart", partIds: $partIds) {
+# Pass excludeStatuses to hide POs with unwanted statuses (e.g. ["Cancelled", "Closed"]).
+query PurchaseOrdersByFixture($fixtureId: String!, $partIds: [String!], $excludeStatuses: [String!]) {
+  purchaseOrdersByFixture(fixtureId: $fixtureId, poType: "StandardPart", partIds: $partIds, excludeStatuses: $excludeStatuses) {
     id
     poNumber
     poStatus
@@ -2239,9 +2254,28 @@ mutation {
 **Failed Response (wrong credentials):**
 ```json
 {
-  "data": {
-    "login": null
-  }
+  "data": { "login": null },
+  "errors": [
+    {
+      "message": "Invalid username or password.",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["login"]
+    }
+  ]
+}
+```
+
+**Failed Response (inactive account):**
+```json
+{
+  "data": { "login": null },
+  "errors": [
+    {
+      "message": "Account is disabled. Please contact your administrator.",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["login"]
+    }
+  ]
 }
 ```
 
@@ -2603,6 +2637,94 @@ const query = `
     }
   }
 `;
+```
+
+---
+
+## Fixture Stage System (Event-Driven Workflow)
+
+The lifecycle is split into two levels: **project-level stages** (`open`, `assigned_to_designer`, `closed`) on the `Project` model, and **fixture-level stages** (`bom_uploaded` → `dispatch`) on the `Fixture` model. Fixtures are created at BOM upload time. Each fixture independently tracks its own stage.
+
+### Fixture Stage Order
+
+| # | Stage | Label | Trigger Event |
+|---|-------|-------|---------------|
+| 0 | `bom_uploaded` | BOM Uploaded | Default when fixture is created via `submitBomUpload` / `submitProjectBomUpload` |
+| 1 | `manufacturing_purchase` | Manufacturing & Purchase | `createPurchaseOrder` includes line items from this fixture |
+| 2 | `assembly` | Assembly | Assembly user clicks "Mark Assembly Complete" (`markAssemblyComplete`) |
+| 3 | `cmm` | CMM | CMM user clicks "Mark CMM Complete" (`markCmmComplete`) |
+| 4 | `dispatch` | Dispatch | Dispatch user clicks "Mark Dispatch Complete" (`markDispatchComplete`) |
+
+### Stage Timestamps (1:1 with stages — shown on progress bar)
+
+| Stage | Column | GraphQL Field |
+|-------|--------|---------------|
+| `bom_uploaded` | `stage_bom_uploaded_at` | `stageBomUploadedAt` |
+| `manufacturing_purchase` | `stage_mfg_purchase_started_at` | `stageMfgPurchaseStartedAt` |
+| `assembly` | `stage_assembly_completed_at` | `stageAssemblyCompletedAt` |
+| `cmm` | `stage_cmm_completed_at` | `stageCmmCompletedAt` |
+| `dispatch` | `stage_dispatch_at` | `stageDispatchAt` |
+
+### Milestone Timestamps (independent of stage — for duration tracking)
+
+| Column | GraphQL Field | Set When | Purpose |
+|--------|---------------|----------|---------|
+| `mfg_purchase_completed_at` | `mfgPurchaseCompletedAt` | All BOM parts received (`markBomPartsReceived`) | When manufacturing/purchase actually ended |
+| `assembly_started_at` | `assemblyStartedAt` | First `collectByAssembly` for this fixture | When assembly work actually began |
+
+These milestones do NOT change the fixture stage — they record overlapping activity durations.
+
+### Duration Calculations
+
+- **Mfg & Purchase duration:** `mfgPurchaseCompletedAt` − `stageMfgPurchaseStartedAt`
+- **Assembly duration:** `stageAssemblyCompletedAt` − `assemblyStartedAt`
+- **CMM duration:** `stageCmmCompletedAt` − `stageAssemblyCompletedAt`
+
+### Key Rules
+
+- **Forward-only:** Stages never go backward automatically. The only way to move backward is `forceFixtureStage`.
+- **No project-level fixture stage:** Each fixture tracks its own stage independently.
+- **Stage timestamps:** Each stage has a dedicated timestamp column set once when the fixture first enters that stage.
+- **Milestone timestamps:** `assembly_started_at` and `mfg_purchase_completed_at` are set independently of stage by their respective events.
+- **Manual override:** `forceFixtureStage(fixtureId, stage)` can set any valid stage (forward or backward). Requires `fixture:update` permission. Audit-logged with `forced: true`.
+
+### Frontend Display (stageInfo)
+
+The `stageInfo` field on `FixtureType` returns an ordered list of 5 stages for rendering a progress bar:
+
+```graphql
+{
+  fixtures(projectId: "...") {
+    items {
+      id fixtureNumber stage
+      stageBomUploadedAt stageMfgPurchaseStartedAt
+      stageAssemblyCompletedAt stageCmmCompletedAt stageDispatchAt
+      mfgPurchaseCompletedAt assemblyStartedAt
+      stageInfo { stage label displayStatus enteredAt }
+    }
+  }
+}
+```
+
+Each `FixtureStageInfoType` entry has `displayStatus`:
+- `"completed"` → green (stages before current)
+- `"current"` → yellow (current stage)
+- `"pending"` → grey/disabled (stages after current)
+
+### GraphQL Examples
+
+```graphql
+# Mark assembly complete (requires Assembly role) — advances manufacturing_purchase → assembly
+mutation { markAssemblyComplete(fixtureId: "fixture-uuid") { id stage stageAssemblyCompletedAt stageInfo { stage label displayStatus enteredAt } } }
+
+# Mark CMM complete (requires CMM role) — advances assembly → cmm
+mutation { markCmmComplete(fixtureId: "fixture-uuid") { id stage stageCmmCompletedAt stageInfo { stage label displayStatus enteredAt } } }
+
+# Mark dispatch complete (requires Dispatch role) — advances cmm → dispatch
+mutation { markDispatchComplete(fixtureId: "fixture-uuid") { id stage stageDispatchAt stageInfo { stage label displayStatus enteredAt } } }
+
+# Force fixture to a specific stage (requires fixture:update permission)
+mutation { forceFixtureStage(fixtureId: "fixture-uuid", stage: "bom_uploaded") { id stage stageInfo { stage label displayStatus enteredAt } } }
 ```
 
 ---
@@ -3707,7 +3829,7 @@ Then update your Authorization header.
 
 **Project Management & Design/BOM (require module `project_management` enabled):** `projects`, `project`, `projectAssignments`, `projectAssignmentBoard`, `fixtures`, `fixture`, `bomView`, `getDesignUploadUrl`, `parseBomFile`, `getDrawingViewUrl`, `getProjectBomUploadUrl`, `parseProjectBomFile`, `getManufacturedPoUploadUrl`.
 
-**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`, `purchaseOrders`, `purchaseOrder`, `exportPurchaseOrderLineItemsXlsx`, `exportCollectByAssemblyExcel`, `getPurchaseOrderAttachmentUploadUrl`, `getPurchaseOrderAttachmentDownloadUrl`.
+**Master Data (require module `master_data` enabled):** `productCategories`, `productCategory`, `customers`, `customer`, `uomList`, `uom`, `taxList`, `tax`, `paymentTermsList`, `paymentTerm`, `expenseCategoriesList`, `expenseCategory`, `suppliers`, `supplier`, `vendors`, `vendor`, `products`, `product`, `purchaseOrders`, `purchaseOrder`, `exportPurchaseOrderLineItemsXlsx`, `exportCollectByAssemblyExcel`, `getPurchaseOrderAttachmentUploadUrl`, `getPurchaseOrderAttachmentDownloadUrl`, `getInvoicePhotoUploadUrl`, `getInvoicePhotoDownloadUrl`.
 
 **Project Management — PO queries (require module `project_management` enabled):** `purchaseOrdersByFixture`, `standardPartsForPo`.
 
@@ -3717,7 +3839,7 @@ Then update your Authorization header.
 
 **Project Management & Design/BOM (require module `project_management` enabled):** `createProject`, `updateProject`, `deleteProject`, `assignProjectPrincipal`, `removeProjectPrincipal`, `createFixture`, `updateFixture`, `deleteFixture`, `submitBomUpload`, `submitProjectBomUpload`, `sendManufacturedToVendor`, `exportManufacturedPoExcel`, `importManufacturedPoExcel`, `createManufacturedPo`, `updateManufacturedStatusBulk`, `updateManufacturedQty`, `updateManufacturedReceivedQty`, `updateStandardPartPurchaseUnitPrice`, `exportStandardPoExcel`, `createStandardPo`, `exportBomViewExcel`.
 
-**Master Data (require module `master_data` enabled):** `createProductCategory`, `updateProductCategory`, `deleteProductCategory`, `createCustomer`, `updateCustomer`, `deleteCustomer`, `createUOM`, `updateUOM`, `deleteUOM`, `createTax`, `updateTax`, `deleteTax`, `createPaymentTerm`, `updatePaymentTerm`, `deletePaymentTerm`, `createExpenseCategory`, `updateExpenseCategory`, `deleteExpenseCategory`, `createSupplier`, `updateSupplier`, `deleteSupplier`, `createVendor`, `updateVendor`, `deleteVendor`, `createProduct`, `updateProduct`, `deleteProduct`, `createPurchaseOrder`, `updatePurchaseOrder`, `deletePurchaseOrder`, `receiveStandardParts`, `markBomPartsReceived`, `collectByAssembly`, `parseCostingExcel`, `confirmCosting`.
+**Master Data (require module `master_data` enabled):** `createProductCategory`, `updateProductCategory`, `deleteProductCategory`, `createCustomer`, `updateCustomer`, `deleteCustomer`, `createUOM`, `updateUOM`, `deleteUOM`, `createTax`, `updateTax`, `deleteTax`, `createPaymentTerm`, `updatePaymentTerm`, `deletePaymentTerm`, `createExpenseCategory`, `updateExpenseCategory`, `deleteExpenseCategory`, `createSupplier`, `updateSupplier`, `deleteSupplier`, `createVendor`, `updateVendor`, `deleteVendor`, `createProduct`, `updateProduct`, `deleteProduct`, `createPurchaseOrder`, `updatePurchaseOrder`, `deletePurchaseOrder`, `receiveStandardParts`, `markBomPartsReceived`, `collectByAssembly`, `parseCostingExcel`, `confirmCosting`, `createBomQtyEvent`, `confirmBomQtyCollection`.
 
 ✅ **Key Features**
 - JWT authentication (1h access, 7d refresh). Login is **username-based** (not email).
@@ -4023,6 +4145,15 @@ The UI receives a fully-filtered list and renders it as-is — no client-side pe
 
 `total`, `totalPages`, `hasMore`, `firstPage`, `lastPage` are all calculated **after** permission filtering, so pagination is always accurate and consistent with what the user can actually see.
 
+### Output Type: BomPartsReceivedResultType
+
+Returned by `markBomPartsReceived`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | `Int!` | Number of `fixture_bom` rows updated |
+| `events` | `[BomQtyEventType!]!` | The `fixture_bom_qty_events` rows created — one per item. Each has an `id` field to use as `eventId` in `getInvoicePhotoUploadUrl`. |
+
 ### Input Type: BomReceiveItemInput
 
 Used in `markBomPartsReceived` mutation.
@@ -4031,6 +4162,8 @@ Used in `markBomPartsReceived` mutation.
 |-------|------|----------|-------------|
 | `fixtureBomId` | `String!` | Yes | `fixture_bom.id` — use `BomManufacturedPartType.id` or `FixtureProductType.id` from the BOM tree |
 | `receivedQty` | `Float!` | Yes | Quantity received. Sets `fixture_bom.received_quantity`. For standard parts also increments `products.quantity`. |
+| `purchaseOrderId` | `String` | No | Optional FK to `purchase_orders.id` — links the receive event to the PO from which these parts were purchased. |
+| `invoiceNumber` | `String` | No | Optional supplier invoice / challan number for this receipt. Stored on the qty event row for traceability. |
 
 ### Input Type: CollectByAssemblyItemInput
 
@@ -4192,10 +4325,33 @@ query GetAssemblyUsers {
 ```graphql
 # fixtureBomId = BomManufacturedPartType.id  OR  FixtureProductType.id
 mutation MarkAsReceived($items: [BomReceiveItemInput!]!) {
-  markBomPartsReceived(items: $items)   # returns count of updated items
+  markBomPartsReceived(items: $items) {
+    count           # number of fixture_bom rows updated
+    events {
+      id            # ← use this as eventId for getInvoicePhotoUploadUrl
+      fixtureBomId
+      drawingNumber
+      qty
+      purchaseOrderId
+      invoiceNumber
+      invoicePhotoS3Key         # null until setInvoicePhotoS3Key is called
+      invoicePhotoDownloadUrl   # presigned GET URL — null until photo is uploaded
+      performedAt
+      note
+    }
+  }
 }
 # variables:
-# { "items": [{ "fixtureBomId": "abc-123", "receivedQty": 5.0 }] }
+# {
+#   "items": [
+#     {
+#       "fixtureBomId": "abc-123",
+#       "receivedQty": 5.0,
+#       "purchaseOrderId": "po-uuid",       # optional — links event to the originating PO
+#       "invoiceNumber": "INV/2026/0042"    # optional — supplier invoice/challan for traceability
+#     }
+#   ]
+# }
 ```
 
 ### Example: Collected by Assembly
@@ -4237,6 +4393,151 @@ query ExportCollectByAssemblyExcel(
   }
 }
 ```
+
+### Example: Create BOM Qty Event (manual adjustment or any note)
+```graphql
+mutation CreateBomQtyEvent($input: CreateBomQtyEventInput!) {
+  createBomQtyEvent(input: $input) {
+    id
+    fixtureBomId
+    drawingNumber
+    kind                  # "receive" | "collect"
+    qty                   # delta recorded in this event
+    performedByUserId
+    performedByUserName
+    performedAt
+    note                  # "Received at Store" | "Collected by Assembly" | "Manual Adjustment"
+    createdAt
+  }
+}
+# variables:
+# {
+#   "input": {
+#     "fixtureBomId": "fb-uuid",
+#     "kind": "RECEIVE",              # enum: RECEIVE | COLLECT
+#     "qty": 3.0,
+#     "performedByUserId": "user-uuid",
+#     "note": "RECEIVED_AT_STORE",    # enum: RECEIVED_AT_STORE | COLLECTED_BY_ASSEMBLY | MANUAL_ADJUSTMENT | STOCK_UPDATED_FROM_PRODUCT_MASTER
+#     "performedAt": "2026-04-12T10:00:00",  # optional — defaults to now
+#     "purchaseOrderId": "po-uuid",          # optional — for receive events, links to PO
+#     "invoiceNumber": "INV/2026/0042"       # optional — supplier invoice/challan number
+#   }
+# }
+```
+
+### Example: Query BOM Qty History
+```graphql
+query BomQtyHistory($drawingNumber: String, $fixtureBomId: String, $itemCode: String, $kind: String, $skip: Int, $limit: Int) {
+  bomQtyHistory(drawingNumber: $drawingNumber, fixtureBomId: $fixtureBomId, itemCode: $itemCode, kind: $kind, skip: $skip, limit: $limit) {
+    total
+    skip
+    limit
+    items {
+      id
+      fixtureBomId
+      drawingNumber
+      kind                              # "receive" | "collect"
+      qty                               # delta — negative means stock reduction
+      performedByUserId
+      performedByUserName
+      performedAt
+      note                              # "Received at Store" | "Collected by Assembly" | "Manual Adjustment" | "Stock Updated from Product Master"
+      collectionConfirmedByAssembly     # false until assembly confirms via confirmBomQtyCollection
+      confirmedByUserId
+      confirmedByUserName
+      confirmedAt
+      purchaseOrderId                   # FK to purchase_orders.id (set on receive events; null otherwise)
+      invoiceNumber                     # supplier invoice/challan number (set on receive events; null otherwise)
+      invoicePhotoS3Key                 # S3 key of uploaded invoice photo (null if none uploaded)
+      invoicePhotoDownloadUrl           # presigned GET URL for inline image view — null when no photo attached
+      createdBy
+      createdAt
+      itemCode                          # product item code (from fixture_bom → product)
+      productName                       # product name
+      currentStock                      # live product.quantity
+      partType                          # "standard" | "manufactured"
+      fixtureName                       # fixture number (e.g. S25049-001)
+    }
+  }
+}
+# variables — use itemCode for standard parts:
+# { "itemCode": "SRBOP003770", "kind": "receive", "skip": 0, "limit": 25 }
+# or use drawingNumber for manufactured parts:
+# { "drawingNumber": "DRW-001", "kind": "collect", "skip": 0, "limit": 25 }
+# Default limit is 25 (last 25 events). Both filters are optional.
+```
+
+### Example: Confirm BOM Qty Collection (Assembly User)
+```graphql
+mutation ConfirmBomQtyCollection($eventId: String!, $confirmedByUserId: String!) {
+  confirmBomQtyCollection(eventId: $eventId, confirmedByUserId: $confirmedByUserId) {
+    id
+    fixtureBomId
+    drawingNumber
+    qty
+    performedByUserName
+    performedAt
+    note
+    collectionConfirmedByAssembly   # true after this mutation
+    confirmedByUserId
+    confirmedByUserName
+    confirmedAt
+  }
+}
+# variables:
+# { "eventId": "event-uuid", "confirmedByUserId": "assembly-user-uuid" }
+# Only kind='collect' events can be confirmed. Idempotent.
+```
+
+### Example: Invoice Photo — Upload Flow (receive event)
+```graphql
+# Step 1 — get a presigned PUT URL (only image files allowed)
+query GetInvoicePhotoUploadUrl($eventId: String!, $filename: String!) {
+  getInvoicePhotoUploadUrl(eventId: $eventId, filename: $filename) {
+    eventId
+    s3Key       # save this — needed for step 2
+    uploadUrl   # PUT the image bytes to this URL directly from the browser
+  }
+}
+# variables: { "eventId": "event-uuid", "filename": "invoice_scan.jpg" }
+
+# Step 2 — after PUT succeeds, persist the S3 key on the event row
+mutation SetInvoicePhotoS3Key($eventId: String!, $s3Key: String!) {
+  setInvoicePhotoS3Key(eventId: $eventId, s3Key: $s3Key) {
+    id
+    invoicePhotoS3Key           # now populated
+    invoicePhotoDownloadUrl     # presigned GET URL — ready to display inline immediately
+    invoiceNumber
+    purchaseOrderId
+    performedAt
+  }
+}
+# variables: { "eventId": "event-uuid", "s3Key": "invoice-photos/event-uuid/20260414T120000_invoice_scan.jpg" }
+```
+
+### Example: Invoice Photo — View / Download
+```graphql
+query GetInvoicePhotoDownloadUrl($eventId: String!) {
+  getInvoicePhotoDownloadUrl(eventId: $eventId) {  # returns null if no photo attached yet
+    eventId
+    s3Key
+    downloadUrl   # presigned GET URL — valid 1 hour; open in browser or <img src>
+  }
+}
+# variables: { "eventId": "event-uuid" }
+```
+
+#### `CreateBomQtyEventInput` fields
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `fixtureBomId` | `String!` | ✓ | `fixture_bom.id` to record the event against |
+| `kind` | `BomQtyEventKindEnum!` | ✓ | `RECEIVE` or `COLLECT` |
+| `qty` | `Float!` | ✓ | Delta quantity for this transaction (positive = addition) |
+| `performedByUserId` | `String!` | ✓ | User who performed the receive/collect |
+| `note` | `BomQtyEventNoteEnum!` | ✓ | `RECEIVED_AT_STORE`, `COLLECTED_BY_ASSEMBLY`, `MANUAL_ADJUSTMENT`, or `STOCK_UPDATED_FROM_PRODUCT_MASTER` |
+| `performedAt` | `DateTime` | — | Timestamp of the event; defaults to current UTC time |
+| `purchaseOrderId` | `String` | — | For `receive` events: FK to `purchase_orders.id` — links receipt to the originating PO. |
+| `invoiceNumber` | `String` | — | For `receive` events: supplier invoice / challan number for traceability. |
 
 ### Example: Export Purchase Order Line Items to XLSX
 ```graphql

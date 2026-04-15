@@ -17,6 +17,10 @@ import {
   DELETE_FIXTURE,
   SUBMIT_BOM_UPLOAD,
   SUBMIT_PROJECT_BOM_UPLOAD,
+  MARK_ASSEMBLY_COMPLETE,
+  MARK_CMM_COMPLETE,
+  MARK_DISPATCH_COMPLETE,
+  FORCE_FIXTURE_STAGE,
 } from '@/graphql/mutations/design.mutations'
 import { getErrorMessage, isPermissionError } from '@/lib/graphqlErrors'
 import type {
@@ -36,8 +40,8 @@ import type { PaginatedList } from '@/types/projectManagement'
 // ── Query Keys ────────────────────────────────────────────────────────────────
 export const designKeys = {
   all: ['design'] as const,
-  fixtures: (projectId: string, status?: string, isActive?: boolean) =>
-    [...designKeys.all, 'fixtures', projectId, status ?? 'all', isActive ?? 'all'] as const,
+  fixtures: (projectId: string, stage?: string, isActive?: boolean) =>
+    [...designKeys.all, 'fixtures', projectId, stage ?? 'all', isActive ?? 'all'] as const,
   fixture: (id: string) => [...designKeys.all, 'fixture', id] as const,
   bomView: (fixtureId: string) => [...designKeys.all, 'bomView', fixtureId] as const,
 }
@@ -50,7 +54,6 @@ export interface CreateFixtureInput {
 
 export interface UpdateFixtureInput {
   description?: string | null
-  status?: string | null
   isActive?: boolean
 }
 
@@ -64,15 +67,15 @@ export interface BomSubmitInput {
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-export function useFixtures(projectId: string | null, status?: string, isActive?: boolean) {
+export function useFixtures(projectId: string | null, stage?: string, isActive?: boolean) {
   return useQuery({
-    queryKey: designKeys.fixtures(projectId ?? '', status, isActive),
+    queryKey: designKeys.fixtures(projectId ?? '', stage, isActive),
     queryFn: () =>
       executeGraphQL<{ fixtures: PaginatedList<FixtureSummary> }>(GET_FIXTURES, {
         projectId: projectId!,
         skip: 0,
         limit: 100,
-        status,
+        stage,
         isActive,
       }),
     enabled: !!projectId,
@@ -218,6 +221,76 @@ export function useSubmitProjectBomUpload(projectId: string) {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to submit BOM'))
+    },
+  })
+}
+
+// ── Stage advancement mutations ──────────────────────────────────────────────
+
+export function useMarkAssemblyComplete(fixtureId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      executeGraphQL<{ markAssemblyComplete: Partial<Fixture> }>(MARK_ASSEMBLY_COMPLETE, { fixtureId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.fixture(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.fixtures(projectId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      toast.success('Assembly marked complete — fixture advanced to CMM')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to mark assembly complete'))
+    },
+  })
+}
+
+export function useMarkCmmComplete(fixtureId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      executeGraphQL<{ markCmmComplete: Partial<Fixture> }>(MARK_CMM_COMPLETE, { fixtureId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.fixture(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.fixtures(projectId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      toast.success('CMM marked complete — fixture advanced to Dispatch')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to mark CMM complete'))
+    },
+  })
+}
+
+export function useMarkDispatchComplete(fixtureId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      executeGraphQL<{ markDispatchComplete: Partial<Fixture> }>(MARK_DISPATCH_COMPLETE, { fixtureId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.fixture(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.fixtures(projectId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      toast.success('Dispatch marked complete — fixture advanced to Dispatch')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to mark dispatch complete'))
+    },
+  })
+}
+
+export function useForceFixtureStage(fixtureId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (stage: string) =>
+      executeGraphQL<{ forceFixtureStage: Partial<Fixture> }>(FORCE_FIXTURE_STAGE, { fixtureId, stage }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.fixture(fixtureId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.fixtures(projectId) })
+      queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
+      toast.success('Fixture stage updated')
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to force fixture stage'))
     },
   })
 }

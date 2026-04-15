@@ -55,6 +55,7 @@ import { EmailsList } from './pages/email/EmailsList'
 import { AuditLogsList } from './pages/audit/AuditLogsList'
 import { ViewEmail } from './pages/email/ViewEmail'
 import { SuperadminDashboardPage } from './pages/dashboard/SuperadminDashboardPage'
+import { BomQtyEventsList } from './pages/bom-events/BomQtyEventsList'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuthQueries'
@@ -569,6 +570,26 @@ function AppContent() {
             <RequireModule moduleId="master_data">
               <ProtectedRoute entity="purchase_order" action="update">
                 <EditPurchaseOrder />
+              </ProtectedRoute>
+            </RequireModule>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* BOM Receive & Collect Log */}
+      <Route
+        path="/bom-events"
+        element={
+          !isInitialized ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+              <Loader />
+            </div>
+          ) : user ? (
+            <RequireModule moduleId="project_management">
+              <ProtectedRoute entity="fixture_bom" action="read">
+                <BomQtyEventsList />
               </ProtectedRoute>
             </RequireModule>
           ) : (

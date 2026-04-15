@@ -23,8 +23,8 @@ export const poKeys = {
     [...poKeys.lists(), { page, pageSize, ...filters }] as const,
   details: () => [...poKeys.all, 'detail'] as const,
   detail: (id: string) => [...poKeys.details(), id] as const,
-  byFixture: (fixtureId: string, poType: string, partIds?: string[]) =>
-    [...poKeys.all, 'byFixture', fixtureId, poType, partIds] as const,
+  byFixture: (fixtureId: string, poType: string | null, partIds?: string[], excludeStatuses?: string[]) =>
+    [...poKeys.all, 'byFixture', fixtureId, poType, partIds, excludeStatuses] as const,
   standardPartsForPo: (fixtureId: string) =>
     [...poKeys.all, 'standardPartsForPo', fixtureId] as const,
 }
@@ -54,17 +54,19 @@ export function usePurchaseOrder(id: string | undefined) {
 
 export function usePurchaseOrdersByFixture(
   fixtureId: string,
-  poType = 'StandardPart',
+  poType: string | null = 'StandardPart',
   enabled = true,
   partIds?: string[],
+  excludeStatuses?: string[],
 ) {
   return useQuery({
-    queryKey: poKeys.byFixture(fixtureId, poType, partIds),
+    queryKey: poKeys.byFixture(fixtureId, poType, partIds, excludeStatuses),
     queryFn: () =>
       executeGraphQL<{ purchaseOrdersByFixture: PoByFixture[] }>(PURCHASE_ORDERS_BY_FIXTURE, {
         fixtureId,
-        poType,
+        poType: poType ?? undefined,
         partIds: partIds && partIds.length > 0 ? partIds : undefined,
+        excludeStatuses: excludeStatuses && excludeStatuses.length > 0 ? excludeStatuses : undefined,
       }),
     enabled: !!fixtureId && enabled,
   })

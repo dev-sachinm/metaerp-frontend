@@ -61,8 +61,8 @@ export const GET_CURRENT_USER = `
  * Used for Assembly user dropdown in BOM Collected by Assembly flow
  */
 export const GET_USERS_BY_ROLE_NAME = `
-  query GetUsersByRoleName($roleName: String!, $limit: Int!) {
-    users(roleName: $roleName, limit: $limit) {
+  query GetUsersByRoleName($roleName: String!) {
+    users(roleName: $roleName, pageSize: 200) {
       items {
         id
         firstName

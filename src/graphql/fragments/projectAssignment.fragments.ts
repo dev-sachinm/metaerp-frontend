@@ -5,6 +5,8 @@ export const PROJECT_SUMMARY_FIELDS = `
   status
   customerId
   customerName
+  startDate
+  inProgressAt
   targetDate
   remainingDays
   isActive

@@ -45,6 +45,8 @@ export interface PurchaseOrder {
   poStatus?: string | null
   costingUpdatedDate?: string | null
   completedDate?: string | null
+  enableCosting?: boolean | null
+  sendPoEnabled?: boolean | null
   isActive: boolean
   lineItems: PurchaseOrderLineItem[]
   lineItemsSummary?: { totalCost: number | null; itemCount: number } | null
@@ -70,6 +72,7 @@ export interface PurchaseOrderSummary {
   costingUpdatedDate?: string | null
   completedDate?: string | null
   enableCosting?: boolean | null
+  sendPoEnabled?: boolean | null
   isActive: boolean
   createdAt?: string | null
   createdByUsername?: string | null
@@ -90,7 +93,18 @@ export interface PoByFixtureLineItem {
 export interface PoByFixture {
   id: string
   poNumber: string
+  title?: string | null
+  poType?: string | null
   poStatus?: string | null
+  projectId?: string | null
+  vendorId?: string | null
+  supplierId?: string | null
+  poSendDate?: string | null
+  costingUpdatedDate?: string | null
+  completedDate?: string | null
+  enableCosting?: boolean | null
+  sendPoEnabled?: boolean | null
+  isActive?: boolean | null
   supplierName?: string | null
   createdAt?: string | null
   lineItems: PoByFixtureLineItem[]

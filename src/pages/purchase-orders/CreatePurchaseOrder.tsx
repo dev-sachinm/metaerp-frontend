@@ -63,6 +63,7 @@ export function CreatePurchaseOrder() {
       details,
       poStatus: 'Draft',
       lineItems: cleanedLineItems,
+      ...(poType === 'StandardPart' && { sendPoEnabled: false }),
     }
 
     try {
