@@ -28,8 +28,11 @@ interface CollectRow {
   label: string
   description: string
   partType: 'Manufactured' | 'Standard'
-  availableQty: number | null
-  alreadyCollected: number | null
+  availableQty: number | null      // mfg: receivedQuantity
+  alreadyCollected: number | null  // mfg: collectedByassemblyQuantity
+  bomQty: number | null
+  expQty: number | null            // std: expectedQty
+  inStock: number | null           // std: currentStock
   collectNow: string
 }
 
@@ -68,6 +71,9 @@ export function CollectByAssemblyDialog({
       partType: 'Manufactured',
       availableQty: p.receivedQuantity ?? null,
       alreadyCollected: p.collectedByassemblyQuantity ?? null,
+      bomQty: p.qty ?? null,
+      expQty: null,
+      inStock: null,
       collectNow: '',
     }))
     const stdRows: CollectRow[] = eligibleStdParts.map((p) => ({
@@ -75,8 +81,11 @@ export function CollectByAssemblyDialog({
       label: p.itemCode ?? '—',
       description: p.productName ?? '—',
       partType: 'Standard',
-      availableQty: p.qty ?? null,
+      availableQty: p.receivedQuantity ?? null,
       alreadyCollected: p.collectedByassemblyQuantity ?? null,
+      bomQty: p.qty ?? null,
+      expQty: p.expectedQty ?? null,
+      inStock: p.currentStock ?? null,
       collectNow: '',
     }))
     setRows([...mfgRows, ...stdRows])
@@ -84,7 +93,9 @@ export function CollectByAssemblyDialog({
   }, [open])
 
   const getRemaining = (row: CollectRow): number =>
-    Math.max(0, (row.availableQty ?? 0) - (row.alreadyCollected ?? 0))
+    row.partType === 'Standard'
+      ? Math.max(0, row.inStock ?? 0)
+      : Math.max(0, (row.availableQty ?? 0) - (row.alreadyCollected ?? 0))
 
   const handleCollectChange = (index: number, value: string) => {
     setRows((prev) => {
@@ -138,6 +149,9 @@ export function CollectByAssemblyDialog({
   const hasValidItems = rows.some(
     (r) => r.collectNow.trim() !== '' && !Number.isNaN(parseFloat(r.collectNow)) && parseFloat(r.collectNow) > 0,
   )
+  const hasStdRows = rows.some((r) => r.partType === 'Standard')
+  // base: Drawing/Item, Description, Part Type, Received Qty, Exp Qty, Collect Now = 6
+  const colSpan = 6 + (hasStdRows ? 1 : 0)
 
   const submitted = !!downloadUrl
 
@@ -182,8 +196,9 @@ export function CollectByAssemblyDialog({
                   <th className="px-3 py-2">Drawing / Item</th>
                   <th className="px-3 py-2">Description</th>
                   <th className="px-3 py-2 text-center">Part Type</th>
-                  <th className="px-3 py-2 text-center">Available Qty</th>
-                  <th className="px-3 py-2 text-center">Already Collected</th>
+                  <th className="px-3 py-2 text-center">Received Qty</th>
+                  <th className="px-3 py-2 text-center">Exp Qty</th>
+                  {hasStdRows && <th className="px-3 py-2 text-center">In Stock</th>}
                   <th className="px-3 py-2 text-center">Collect Now</th>
                 </tr>
               </thead>
@@ -208,12 +223,28 @@ export function CollectByAssemblyDialog({
                         {row.partType}
                       </Badge>
                     </td>
+                    {/* Received Qty — both part types */}
                     <td className="px-3 py-2 text-center text-xs font-medium">
-                      {row.availableQty ?? '—'}
+                      {row.availableQty != null
+                        ? <span className={row.availableQty > 0 ? 'text-blue-600' : 'text-slate-400'}>{row.availableQty}</span>
+                        : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-center text-xs font-medium font-mono">
-                      {row.alreadyCollected ?? 0}
+                    {/* Exp Qty — std only */}
+                    <td className="px-3 py-2 text-center text-xs font-medium">
+                      {row.partType === 'Standard' ? (row.expQty ?? '—') : <span className="text-slate-300">—</span>}
                     </td>
+                    {/* In Stock — std only (product master stock), column hidden when no std rows */}
+                    {hasStdRows && (
+                      <td className="px-3 py-2 text-center text-xs font-medium">
+                        {row.partType === 'Standard' ? (
+                          <span className={row.inStock != null && row.inStock > 0 ? 'text-green-600' : 'text-slate-400'}>
+                            {row.inStock ?? 0}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-center">
                       <Input
                         className="h-7 text-xs px-1.5 py-0 w-20 text-center mx-auto"
@@ -236,7 +267,7 @@ export function CollectByAssemblyDialog({
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-slate-400 text-sm">
+                    <td colSpan={colSpan} className="px-3 py-6 text-center text-slate-400 text-sm">
                       No eligible items
                     </td>
                   </tr>

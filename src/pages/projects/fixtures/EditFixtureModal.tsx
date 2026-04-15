@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader } from '@/components/Loader'
 import { useFixture, useUpdateFixture, useDeleteFixture } from '@/hooks/graphql/useDesign'
-import { FIXTURE_STATUS_LABELS, FIXTURE_STATUS_ORDER } from '@/types/design'
-import type { FixtureStatus } from '@/types/design'
+import { StageProgressBar } from '@/components/fixtures/StageProgressBar'
+import { FIXTURE_STAGE_LABELS } from '@/types/design'
 
 interface Props {
   fixtureId: string | null
@@ -25,7 +25,6 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
   const fixture = data?.fixture
 
   const [description, setDescription] = useState('')
-  const [status, setStatus] = useState<FixtureStatus>('design_pending')
   const [isActive, setIsActive] = useState(true)
 
   const updateFixture = useUpdateFixture(fixtureId ?? '', projectId)
@@ -34,7 +33,6 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
   useEffect(() => {
     if (fixture) {
       setDescription(fixture.description ?? '')
-      setStatus(fixture.status as FixtureStatus)
       setIsActive(fixture.isActive)
     }
   }, [fixture])
@@ -42,10 +40,10 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
   const handleSave = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      await updateFixture.mutateAsync({ description: description.trim() || null, status, isActive })
+      await updateFixture.mutateAsync({ description: description.trim() || null, isActive })
       onClose()
     },
-    [updateFixture, description, status, isActive, onClose]
+    [updateFixture, description, isActive, onClose]
   )
 
   const handleDelete = useCallback(async () => {
@@ -57,7 +55,7 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
             Edit Fixture
@@ -73,6 +71,16 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
           <p className="text-sm text-slate-500 py-4">Fixture not found.</p>
         ) : (
           <form onSubmit={handleSave} className="space-y-4 pt-2">
+            {/* Stage progress bar (read-only) */}
+            {fixture.stageInfo && fixture.stageInfo.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-2">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Current Stage: <span className="text-amber-600">{FIXTURE_STAGE_LABELS[fixture.stage] ?? fixture.stage}</span>
+                </p>
+                <StageProgressBar stageInfo={fixture.stageInfo} compact />
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-desc">Description</Label>
               <Input
@@ -81,20 +89,6 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Optional description"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-status">Status</Label>
-              <select
-                id="edit-status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as FixtureStatus)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {FIXTURE_STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>{FIXTURE_STATUS_LABELS[s]}</option>
-                ))}
-              </select>
             </div>
 
             <div className="flex items-center gap-3">
@@ -108,10 +102,9 @@ export function EditFixtureModal({ fixtureId, projectId, onClose }: Props) {
               <Label htmlFor="edit-active">Active</Label>
             </div>
 
-            {/* Audit info */}
             {fixture.bomFilename && (
               <p className="text-xs text-slate-500 bg-slate-50 rounded px-3 py-2">
-                📎 BOM: <span className="font-medium">{fixture.bomFilename}</span>
+                BOM: <span className="font-medium">{fixture.bomFilename}</span>
                 {fixture.bomUploadedAt && (
                   <> — {new Date(fixture.bomUploadedAt).toLocaleString()}</>
                 )}

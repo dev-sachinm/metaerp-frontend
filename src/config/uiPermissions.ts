@@ -24,7 +24,7 @@ export const UI_PERMISSIONS = {
   VIEW_PROJECT:        { entity: 'project', action: 'read'   },
 
   // ── BOM / Fixtures ────────────────────────────────────────────────────────
-  UPLOAD_BOM:          { entity: 'fixture', action: 'update' },
+  UPLOAD_BOM:          { entity: 'fixture', action: 'create' },
   VIEW_BOM:            { entity: 'fixture', action: 'read'   },
 
   // ── Purchase orders (BOM: create manufacturing / standard PO) ─────────────

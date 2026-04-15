@@ -2,31 +2,45 @@
  * Design & BOM types — Fixtures, BOM view, upload wizard
  */
 
-// ── Fixture status progression ──────────────────────────────────────────────
-export type FixtureStatus =
-  | 'design_pending'
-  | 'design_in_progress'
-  | 'procurement_in_progress'
-  | 'assembly_completed'
-  | 'cmm_confirmed'
-  | 'dispatched'
+// ── Fixture stage progression (5-stage pipeline) ────────────────────────────
+export type FixtureStage =
+  | 'bom_uploaded'
+  | 'manufacturing_purchase'
+  | 'assembly'
+  | 'cmm'
+  | 'dispatch'
 
-export const FIXTURE_STATUS_ORDER: FixtureStatus[] = [
-  'design_pending',
-  'design_in_progress',
-  'procurement_in_progress',
-  'assembly_completed',
-  'cmm_confirmed',
-  'dispatched',
+export const FIXTURE_STAGE_ORDER: FixtureStage[] = [
+  'bom_uploaded',
+  'manufacturing_purchase',
+  'assembly',
+  'cmm',
+  'dispatch',
 ]
 
-export const FIXTURE_STATUS_LABELS: Record<FixtureStatus, string> = {
-  design_pending:          'Design Pending',
-  design_in_progress:      'Design In Progress',
-  procurement_in_progress: 'Procurement In Progress',
-  assembly_completed:      'Assembly Completed',
-  cmm_confirmed:           'CMM Confirmed',
-  dispatched:              'Dispatched',
+export const FIXTURE_STAGE_LABELS: Record<FixtureStage, string> = {
+  bom_uploaded:            'BOM Uploaded',
+  manufacturing_purchase:  'Manufacturing & Purchase',
+  assembly:                'Assembly',
+  cmm:                     'CMM',
+  dispatch:                'Dispatch',
+}
+
+/** @deprecated Use FixtureStage instead */
+export type FixtureStatus = FixtureStage
+
+/** @deprecated Use FIXTURE_STAGE_ORDER instead */
+export const FIXTURE_STATUS_ORDER = FIXTURE_STAGE_ORDER
+/** @deprecated Use FIXTURE_STAGE_LABELS instead */
+export const FIXTURE_STATUS_LABELS = FIXTURE_STAGE_LABELS
+
+export type FixtureStageDisplayStatus = 'completed' | 'current' | 'pending'
+
+export interface FixtureStageInfo {
+  stage: string
+  label: string
+  displayStatus: FixtureStageDisplayStatus
+  enteredAt: string | null
 }
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
@@ -34,16 +48,37 @@ export interface FixtureSummary {
   id: string
   fixtureNumber: string
   fixtureSeq: number
-  status: FixtureStatus
+  stage: FixtureStage
   isActive: boolean
   bomFilename?: string | null
   bomUploadedAt?: string | null
+  assemblyUserId?: string | null
+  assemblyUserName?: string | null
+  stageInfo?: FixtureStageInfo[]
+  // Stage timestamps (available in list for progress bar / duration display)
+  stageBomUploadedAt?: string | null
+  stageMfgPurchaseStartedAt?: string | null
+  stageAssemblyCompletedAt?: string | null
+  stageCmmCompletedAt?: string | null
+  stageDispatchAt?: string | null
+  mfgPurchaseCompletedAt?: string | null
+  assemblyStartedAt?: string | null
 }
 
 export interface Fixture extends FixtureSummary {
   description?: string | null
   bomUploadedBy?: string | null
   createdAt?: string | null
+  modifiedAt?: string | null
+  // Stage timestamps (1:1 with stages — shown on progress bar)
+  stageBomUploadedAt?: string | null
+  stageMfgPurchaseStartedAt?: string | null
+  stageAssemblyCompletedAt?: string | null
+  stageCmmCompletedAt?: string | null
+  stageDispatchAt?: string | null
+  // Milestone timestamps (for duration tracking)
+  mfgPurchaseCompletedAt?: string | null
+  assemblyStartedAt?: string | null
 }
 
 // ── BOM View ─────────────────────────────────────────────────────────────────
@@ -86,6 +121,7 @@ export interface StandardPart {
   productName?: string | null
   productMake?: string | null
   qty?: number | null
+  receivedQuantity?: number | null
   currentStock?: number | null
   expectedQty?: number | null
   purchaseQty?: number | null
@@ -101,7 +137,8 @@ export interface StandardPart {
 export interface BomViewFixture {
   id: string
   fixtureNumber: string
-  status: FixtureStatus
+  stage: FixtureStage
+  stageInfo?: FixtureStageInfo[]
 }
 
 export interface BomView {

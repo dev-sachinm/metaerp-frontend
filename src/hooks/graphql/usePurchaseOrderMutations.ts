@@ -36,12 +36,18 @@ export function useCreateManufacturedPo(fixtureId: string) {
 export function useCreateStandardPo(fixtureId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (vars: { parts: StandardPoPartInput[]; supplierId: string }) =>
-      executeGraphQL<{ createStandardPo: PurchaseOrderCreateResult }>(CREATE_STANDARD_PO, {
+    mutationFn: async (vars: { parts: StandardPoPartInput[]; supplierId: string }) => {
+      const result = await executeGraphQL<{ createStandardPo: PurchaseOrderCreateResult }>(CREATE_STANDARD_PO, {
         fixtureId,
         parts: vars.parts,
         supplierId: vars.supplierId,
-      }),
+      })
+      await executeGraphQL(UPDATE_PURCHASE_ORDER, {
+        id: result.createStandardPo.id,
+        input: { sendPoEnabled: false },
+      })
+      return result
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: designKeys.bomView(fixtureId) })
       queryClient.invalidateQueries({ queryKey: poKeys.byFixture(fixtureId, 'StandardPart') })
@@ -100,6 +106,24 @@ export function useTogglePOCosting() {
     },
     onError: (error: unknown) => {
       if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update costing flag'))
+    },
+  })
+}
+
+export function useTogglePOSendEnabled() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, sendPoEnabled }: { id: string; sendPoEnabled: boolean }) =>
+      executeGraphQL<{ updatePurchaseOrder: PurchaseOrderCreateResult }>(UPDATE_PURCHASE_ORDER, {
+        id,
+        input: { sendPoEnabled },
+      }),
+    onSuccess: (_, { sendPoEnabled }) => {
+      queryClient.invalidateQueries({ queryKey: poKeys.lists() })
+      toast.success(`Send PO ${sendPoEnabled ? 'enabled' : 'disabled'}`)
+    },
+    onError: (error: unknown) => {
+      if (!isPermissionError(error)) toast.error(getErrorMessage(error, 'Failed to update send PO flag'))
     },
   })
 }

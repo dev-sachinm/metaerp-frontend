@@ -9,7 +9,7 @@ import { LOGIN_MUTATION, REFRESH_TOKEN_MUTATION } from '@/graphql/mutations/auth
 import { useAuthStore } from '@/stores/authStore';
 import { mergeByRoleToEntities, getRoleNamesFromByRole } from '@/lib/permissions';
 import type { PermissionsByRole } from '@/lib/permissions';
-import { getErrorMessage } from '@/lib/graphqlErrors';
+import { getErrorMessage, isKnownLoginError } from '@/lib/graphqlErrors';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 
@@ -83,7 +83,12 @@ export function useLogin() {
     },
     onError: (error: any) => {
       const rawMessage = error.response?.errors?.[0]?.message || '';
-      // Check for backend database errors
+      // Known auth errors (invalid credentials / account disabled) are shown inline
+      // by the form — no toast needed to avoid duplication.
+      if (isKnownLoginError(error)) {
+        logger.warn('Login rejected by server', { category: 'business', data: { rawMessage } });
+        return;
+      }
       if (rawMessage.includes('UniqueViolation') || rawMessage.includes('duplicate key')) {
         toast.error('Server error: Database issue. Please try again or contact support.');
         logger.error('Backend database error during login', {
@@ -93,10 +98,7 @@ export function useLogin() {
         });
       } else {
         toast.error(getErrorMessage(error, 'Login failed'));
-        logger.error('Login mutation failed', {
-          category: 'technical',
-          error,
-        });
+        logger.error('Login mutation failed', { category: 'technical', error });
       }
     },
   });

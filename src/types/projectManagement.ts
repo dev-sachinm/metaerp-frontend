@@ -15,6 +15,8 @@ export interface ProjectSummary {
   status?: string | null
   customerId?: string | null
   customerName?: string | null
+  startDate?: string | null
+  inProgressAt?: string | null
   targetDate?: string | null
   remainingDays?: number | null
   isActive?: boolean
@@ -29,6 +31,7 @@ export interface Project {
   description?: string | null
   status?: string | null
   startDate?: string | null
+  inProgressAt?: string | null
   targetDate?: string | null
   actualDeliveryDate?: string | null
   remainingDays?: number | null

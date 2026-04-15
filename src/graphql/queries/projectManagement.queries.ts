@@ -18,6 +18,7 @@ export const GET_PROJECT = `
       description
       status
       startDate
+      inProgressAt
       targetDate
       actualDeliveryDate
       remainingDays

@@ -22,17 +22,22 @@ import {
   Package,
   Eye,
   AlertTriangle,
-  CheckCircle2,
   FileText,
   Search,
   X,
+  CheckCircle2,
 } from 'lucide-react'
 import { useBomView, type BomViewFilters } from '@/hooks/graphql/useDesignItemCode'
 import { format } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { fetchDrawingViewUrl } from '@/hooks/graphql/useDesign'
+import {
+  fetchDrawingViewUrl,
+  useMarkAssemblyComplete,
+  useMarkCmmComplete,
+  useMarkDispatchComplete,
+} from '@/hooks/graphql/useDesign'
 import { useSuppliers, useVendors } from '@/hooks/graphql/useMasterDataQueries'
 import { useCurrentUser } from '@/stores/authStore'
 import { useCreateManufacturedPo, useCreateStandardPo } from '@/hooks/graphql/usePurchaseOrderMutations'
@@ -46,12 +51,11 @@ import {
 } from '@/hooks/graphql/useBomReceivingMutations'
 import { MarkAsReceivedDialog } from './MarkAsReceivedDialog'
 import { CollectByAssemblyDialog } from './CollectByAssemblyDialog'
-import { useUIPermission, useCanAccess } from '@/hooks/usePermissions'
+import { BomQtyHistoryDialog } from './BomQtyHistoryDialog'
 import { formatManufacturedStatus, MANUFACTURED_PART_STATUS_OPTIONS } from '@/lib/bomManufacturedStatuses'
 import type { ManufacturedPart, StandardPart, FixtureSummary } from '@/types/design'
-import { FIXTURE_STATUS_LABELS } from '@/types/design'
-import type { FixtureStatus } from '@/types/design'
-
+import { StageProgressBar, StageProgressDots, type StageDurationInfo } from '@/components/fixtures/StageProgressBar'
+import { DurationCard, calcDurationDays } from '@/components/fixtures/DurationCard'
 // ── Date range filter picker (compact inline) ─────────────────────────────────
 interface DateRangeFilterProps {
   label: string
@@ -111,25 +115,6 @@ function DateRangeFilter({ label, color, range, onChange }: DateRangeFilterProps
   )
 }
 
-// ── Status chip ───────────────────────────────────────────────────────────────
-const STATUS_COLORS: Partial<Record<FixtureStatus, string>> = {
-  design_pending:          'bg-slate-100 text-slate-600 border-slate-200',
-  design_in_progress:      'bg-blue-50 text-blue-700 border-blue-200',
-  procurement_in_progress: 'bg-amber-50 text-amber-700 border-amber-200',
-  assembly_completed:      'bg-teal-50 text-teal-700 border-teal-200',
-  cmm_confirmed:           'bg-indigo-50 text-indigo-700 border-indigo-200',
-  dispatched:              'bg-green-50 text-green-700 border-green-200',
-}
-
-function StatusChip({ status }: { status: FixtureStatus }) {
-  const cls = STATUS_COLORS[status] ?? 'bg-slate-100 text-slate-600 border-slate-200'
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {FIXTURE_STATUS_LABELS[status] ?? status}
-    </span>
-  )
-}
-
 // ── View drawing button ───────────────────────────────────────────────────────
 function ViewDrawingBtn({ partId }: { partId: string }) {
   const [loading, setLoading] = useState(false)
@@ -186,6 +171,8 @@ type ManufacturedPartRowProps = {
   }
   showReceiveQty?: boolean
   assemblyUserName?: string | null
+  onViewReceiveHistory?: () => void
+  onViewCollectHistory?: () => void
 }
 
 function ManufacturedPartRow({
@@ -195,6 +182,8 @@ function ManufacturedPartRow({
   qtyEditing,
   showReceiveQty,
   assemblyUserName,
+  onViewReceiveHistory,
+  onViewCollectHistory,
 }: ManufacturedPartRowProps) {
   return (
     <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
@@ -267,23 +256,34 @@ function ManufacturedPartRow({
       <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap">
         {fmtStatusDate(part.pendingAt) ?? <span className="text-slate-300">—</span>}
       </td>
-      <td className="py-1.5 px-2 text-xs text-blue-600 whitespace-nowrap">
+      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap">
         {fmtStatusDate(part.inprogressAt) ?? <span className="text-slate-300">—</span>}
       </td>
-      <td className="py-1.5 px-2 text-xs text-amber-600 whitespace-nowrap">
+      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap">
         {fmtStatusDate(part.qualityCheckedAt) ?? <span className="text-slate-300">—</span>}
       </td>
-      <td className="py-1.5 px-2 text-xs text-green-600 whitespace-nowrap">
+      <td className="py-1.5 px-2 text-xs text-slate-500 whitespace-nowrap">
         {fmtStatusDate(part.receivedAt) ?? <span className="text-slate-300">—</span>}
       </td>
-      <td className="py-1.5 px-2 text-xs text-center font-mono text-indigo-700">
-        {part.collectedByassemblyQuantity != null ? part.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+      <td className="py-1.5 px-2 text-xs text-center font-mono text-blue-600">
+        {onViewCollectHistory ? (
+          <button
+            type="button"
+            onClick={onViewCollectHistory}
+            className="text-blue-600 hover:text-blue-800 hover:underline"
+            title="View collect history"
+          >
+            {part.collectedByassemblyQuantity != null ? part.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+          </button>
+        ) : (
+          part.collectedByassemblyQuantity != null ? part.collectedByassemblyQuantity : <span className="text-slate-300">—</span>
+        )}
       </td>
       <td className="py-1.5 px-2 text-xs text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={assemblyUserName ?? ''}>
         {assemblyUserName || <span className="text-slate-300">—</span>}
       </td>
       {showReceiveQty && (
-        <td className="py-1.5 px-2 text-xs text-slate-600 text-center font-mono">
+        <td className="py-1.5 px-2 text-xs text-blue-600 text-center font-mono">
           {storeReceiving?.editing ? (
             <Input
               className="h-7 text-xs px-1 py-0 w-20"
@@ -298,7 +298,18 @@ function ManufacturedPartRow({
                 }
               }}
             />
-          ) : part.receivedQuantity != null ? part.receivedQuantity : '—'}
+          ) : onViewReceiveHistory ? (
+            <button
+              type="button"
+              onClick={onViewReceiveHistory}
+              className="text-blue-600 hover:text-blue-800 hover:underline"
+              title="View receive history"
+            >
+              {part.receivedQuantity != null ? part.receivedQuantity : '—'}
+            </button>
+          ) : (
+            part.receivedQuantity != null ? part.receivedQuantity : '—'
+          )}
         </td>
       )}
       <td className="py-1.5 px-2 text-right whitespace-nowrap">
@@ -361,6 +372,11 @@ function UnitSection({
   onSavePrice,
   savingPriceId,
   assemblyUserById,
+  onViewReceiveHistoryForPart,
+  onViewCollectHistoryForPart,
+  onViewCollectHistoryForStdPart,
+  onViewReceiveHistoryForStdPart,
+  stdReceiveMode,
 }: {
   unitSeq: number
   mfgParts: ManufacturedPart[]
@@ -386,6 +402,11 @@ function UnitSection({
   onSavePrice?: (lineId: string) => void
   savingPriceId?: string | null
   assemblyUserById?: Record<string, string>
+  onViewReceiveHistoryForPart?: (part: ManufacturedPart) => void
+  onViewCollectHistoryForPart?: (part: ManufacturedPart) => void
+  onViewCollectHistoryForStdPart?: (part: StandardPart) => void
+  onViewReceiveHistoryForStdPart?: (part: StandardPart) => void
+  stdReceiveMode?: boolean
 }) {
   const [open, setOpen] = useState(true)
   const totalParts = mfgParts.length + stdParts.length
@@ -473,6 +494,8 @@ function UnitSection({
                           ? (assemblyUserById?.[p.collectedByUserId] ?? p.collectedByUserId)
                           : null
                       }
+                      onViewReceiveHistory={onViewReceiveHistoryForPart ? () => onViewReceiveHistoryForPart(p) : undefined}
+                      onViewCollectHistory={onViewCollectHistoryForPart ? () => onViewCollectHistoryForPart(p) : undefined}
                     />
                   ))}
                 </tbody>
@@ -488,7 +511,7 @@ function UnitSection({
                     <Package className="h-3 w-3 text-teal-600" />
                     <span className="text-xs font-medium text-teal-800">Standard Parts</span>
                   </div>
-                  {poMode && onSelectAllStd && onClearStd && (
+                  {(poMode || stdReceiveMode) && onSelectAllStd && onClearStd && (
                     <>
                       <div className="h-3 w-px bg-teal-200 mx-1"></div>
                       <div className="flex items-center gap-2 text-xs text-teal-600">
@@ -503,7 +526,7 @@ function UnitSection({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-teal-100 bg-white">
-                    {poMode && (
+                    {(poMode || stdReceiveMode) && (
                       <th className="py-1 px-2 w-10 text-left text-xs font-medium text-slate-400" />
                     )}
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Item Code</th>
@@ -512,6 +535,9 @@ function UnitSection({
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Exp Qty</th>
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">In Stock</th>
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">To Purchase</th>
+                    {showReceiveQtyCol && (
+                      <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Received Qty</th>
+                    )}
                     <th className="py-1 px-2 text-center text-xs font-medium text-slate-400">Collected Qty</th>
                     <th className="py-1 px-2 text-left text-xs font-medium text-slate-400">Assembly User</th>
                     {showPriceEditCol && (
@@ -528,9 +554,11 @@ function UnitSection({
                       : null
                     return (
                       <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-teal-50/40 transition-colors">
-                        {poMode && (
+                        {(poMode || stdReceiveMode) && (
                           <td className="py-1.5 px-2 w-10 align-middle">
-                            {needsPurchase ? (
+                            {poMode && !stdReceiveMode && !needsPurchase ? (
+                              <span className="text-xs text-slate-300">—</span>
+                            ) : (
                               <input
                                 type="checkbox"
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -538,8 +566,6 @@ function UnitSection({
                                 onChange={() => onToggleStdPart?.(p.id)}
                                 aria-label={`Select ${p.itemCode ?? p.id}`}
                               />
-                            ) : (
-                              <span className="text-xs text-slate-300">—</span>
                             )}
                           </td>
                         )}
@@ -565,8 +591,35 @@ function UnitSection({
                             {purchaseQty}
                           </span>
                         </td>
-                        <td className="py-1.5 px-2 text-xs text-center font-mono text-indigo-700">
-                          {p.collectedByassemblyQuantity != null ? p.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+                        {showReceiveQtyCol && (
+                          <td className="py-1.5 px-2 text-xs text-center font-mono text-blue-600">
+                            {onViewReceiveHistoryForStdPart ? (
+                              <button
+                                type="button"
+                                onClick={() => onViewReceiveHistoryForStdPart(p)}
+                                className="text-blue-600 hover:text-blue-800 hover:underline"
+                                title="View receive history"
+                              >
+                                {p.receivedQuantity != null ? p.receivedQuantity : <span className="text-slate-300">—</span>}
+                              </button>
+                            ) : (
+                              p.receivedQuantity != null ? p.receivedQuantity : <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="py-1.5 px-2 text-xs text-center font-mono text-blue-600">
+                          {onViewCollectHistoryForStdPart ? (
+                            <button
+                              type="button"
+                              onClick={() => onViewCollectHistoryForStdPart(p)}
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                              title="View collect history"
+                            >
+                              {p.collectedByassemblyQuantity != null ? p.collectedByassemblyQuantity : <span className="text-slate-300">—</span>}
+                            </button>
+                          ) : (
+                            p.collectedByassemblyQuantity != null ? p.collectedByassemblyQuantity : <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="py-1.5 px-2 text-xs text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={stdAssemblyUser ?? ''}>
                           {stdAssemblyUser || <span className="text-slate-300">—</span>}
@@ -739,15 +792,27 @@ function StandardPartsSection({
   )
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildStageDurations(fixture: FixtureSummary): StageDurationInfo[] {
+  const durations: StageDurationInfo[] = []
+  if (fixture.stageAssemblyCompletedAt && fixture.stageCmmCompletedAt) {
+    const days = calcDurationDays(fixture.stageAssemblyCompletedAt, fixture.stageCmmCompletedAt)
+    durations.push({ stage: 'cmm', durationDays: days })
+  }
+  return durations
+}
+
 // ── Per-fixture expandable row ────────────────────────────────────────────────
 interface FixtureTreeRowProps {
   fixture: FixtureSummary
   projectId: string
+  projectStartDate?: string | null
 }
 
 type BomWorkbenchMode = 'default' | 'procurement' | 'store' | 'manufacturing'
 
-function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
+function FixtureTreeRow({ fixture, projectId, projectStartDate }: FixtureTreeRowProps) {
   const [expanded, setExpanded] = useState(false)
   // const canManageReceiving = useUIPermission('MANAGE_BOM_RECEIVING')
   const currentUser = useCurrentUser()
@@ -763,7 +828,12 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
 
   const updateMfgQty = useUpdateManufacturedQty(fixture.id)
   const updateStdPrice = useUpdateStandardPartPurchaseUnitPrice(fixture.id)
-
+  const markAssemblyComplete = useMarkAssemblyComplete(fixture.id, projectId)
+  const [assemblyCompleteDlgOpen, setAssemblyCompleteDlgOpen] = useState(false)
+  const markCmmComplete = useMarkCmmComplete(fixture.id, projectId)
+  const [cmmCompleteDlgOpen, setCmmCompleteDlgOpen] = useState(false)
+  const markDispatchComplete = useMarkDispatchComplete(fixture.id, projectId)
+  const [dispatchCompleteDlgOpen, setDispatchCompleteDlgOpen] = useState(false)
   // const canCreatePo = useUIPermission('CREATE_PURCHASE_ORDER_PO')
   // const canEditPo = useCanAccess('purchase_order', 'update')
 
@@ -781,9 +851,11 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     const isManufacturing = hasRole('Manufacturing')
     const isQualityCheck = hasRole('Quality')
     const isDesigner = hasRole('Design')
+    const isAssembly = hasRole('Assembly') || hasRole('Assembly Team')
+    const isCMM = hasRole('CMM Operator') || hasRole('CMM')
+    const isDispatch = hasRole('Dispatch') || hasRole('Superadmin')
     
-    // If the user has a mix of roles, we combine their capabilities
-    const hasAnyRole = isStore || isPurchase || isManufacturing || isQualityCheck || isDesigner
+    const hasAnyRole = isStore || isPurchase || isManufacturing || isQualityCheck || isDesigner || isAssembly || isCMM || isDispatch
 
     const showMfgCheckbox = isManufacturing || isQualityCheck || isStore
 
@@ -793,13 +865,21 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
       canEditStdPrice: false,
       canMarkQualityChecked: isQualityCheck,
       canMarkReceived: isStore,
+      canCollectAssembly: isStore,
       canUpdateStdQty: isStore,
       canEditMfgQty: isDesigner,
+      canViewReceiveHistory: isStore,
+      canViewCollectHistory: isStore || isAssembly,
+      canMarkAssemblyComplete: isAssembly,
+      assemblyButtonVisible: isAssembly && fixture.stage === 'manufacturing_purchase',
+      canMarkCmmComplete: isCMM,
+      cmmButtonVisible: isCMM && fixture.stage === 'assembly',
+      canMarkDispatchComplete: isDispatch,
+      dispatchButtonVisible: isDispatch && fixture.stage === 'cmm',
       showMfgParts: !isPurchase,
-      showStdParts: isDesigner || isPurchase || isStore || !hasAnyRole,
-      // QC only sees inprogress and quality_checked mfg parts, unless they also have other roles requiring full visibility
-      mfgStatusFilter: null, // Removed filter to allow Quality to see all mfg parts
-      mfgSelectableStatuses: null as string[] | null, // Default to null, will override below if specific roles
+      showStdParts: isDesigner || isPurchase || isStore || isAssembly || !hasAnyRole,
+      mfgStatusFilter: null,
+      mfgSelectableStatuses: null as string[] | null,
       showMfgCheckbox,
     }
     
@@ -811,7 +891,7 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
     caps.mfgSelectableStatuses = caps.showMfgCheckbox ? Array.from(selectable) : null;
 
     return caps;
-  }, [currentUser?.roles])
+  }, [currentUser?.roles, fixture.stage])
 
   const [selMfg, setSelMfg] = useState<Set<string>>(() => new Set())
   const [selMfgStatus, setSelMfgStatus] = useState<Set<string>>(() => new Set())
@@ -843,8 +923,14 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
   const [savingPriceLineId, setSavingPriceLineId] = useState<string | null>(null)
   const [markReceivedOpen, setMarkReceivedOpen] = useState(false)
   const [collectAssemblyOpen, setCollectAssemblyOpen] = useState(false)
+  const [historyDlg, setHistoryDlg] = useState<{
+    displayLabel: string
+    drawingNumber?: string
+    fixtureBomId?: string
+    kind: 'receive' | 'collect'
+  } | null>(null)
 
-  const { data: assemblyUsersData } = useAssemblyUsers(capabilities.canMarkReceived)
+  const { data: assemblyUsersData } = useAssemblyUsers()
 
   const assemblyUserById = useMemo(() => {
     const map: Record<string, string> = {}
@@ -1117,8 +1203,50 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
         {/* Fixture number */}
         <span className="font-mono text-sm font-bold text-slate-800">{fixture.fixtureNumber}</span>
 
-        {/* Status */}
-        <StatusChip status={fixture.status as FixtureStatus} />
+        {/* Stage dots (compact) */}
+        {fixture.stageInfo && <StageProgressDots stageInfo={fixture.stageInfo} openStageDate={projectStartDate} />}
+
+        {/* Mark Assembly Complete — visible for Assembly role at manufacturing_purchase stage */}
+        {capabilities.assemblyButtonVisible && (
+          <Button
+            type="button"
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700 h-7 text-xs gap-1 px-2"
+            disabled={markAssemblyComplete.isPending}
+            onClick={(e) => { e.stopPropagation(); setAssemblyCompleteDlgOpen(true) }}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            {markAssemblyComplete.isPending ? 'Marking…' : 'Mark Assembly Complete'}
+          </Button>
+        )}
+
+        {/* Mark CMM Complete — visible for CMM role at assembly stage */}
+        {capabilities.cmmButtonVisible && (
+          <Button
+            type="button"
+            size="sm"
+            className="bg-teal-600 hover:bg-teal-700 h-7 text-xs gap-1 px-2"
+            disabled={markCmmComplete.isPending}
+            onClick={(e) => { e.stopPropagation(); setCmmCompleteDlgOpen(true) }}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            {markCmmComplete.isPending ? 'Marking…' : 'Mark CMM Complete'}
+          </Button>
+        )}
+
+        {/* Mark Dispatch Complete — visible for Dispatch role at cmm stage */}
+        {capabilities.dispatchButtonVisible && (
+          <Button
+            type="button"
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 h-7 text-xs gap-1 px-2"
+            disabled={markDispatchComplete.isPending}
+            onClick={(e) => { e.stopPropagation(); setDispatchCompleteDlgOpen(true) }}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            {markDispatchComplete.isPending ? 'Marking…' : 'Mark Dispatch Complete'}
+          </Button>
+        )}
 
         {/* Active filter indicator */}
         {activeFilterCount > 0 && (
@@ -1128,18 +1256,6 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
           </span>
         )}
 
-        {/* BOM state */}
-        {fixture.bomFilename ? (
-          <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-100 rounded-full px-2 py-0.5">
-            <CheckCircle2 className="h-3 w-3" />
-            BOM Uploaded
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5">
-            <AlertTriangle className="h-3 w-3" />
-            No BOM
-          </span>
-        )}
 
         {/* Part counts (shown once data is loaded) */}
         {bomView && (
@@ -1164,6 +1280,32 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
       {expanded && (
         <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-4 space-y-3">
 
+          {/* Stage progress bar with CMM duration */}
+          {fixture.stageInfo && fixture.stageInfo.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+              <StageProgressBar
+                stageInfo={fixture.stageInfo}
+                stageDurations={buildStageDurations(fixture)}
+                openStageDate={projectStartDate}
+              />
+            </div>
+          )}
+
+          {/* Duration cards + Force stage override */}
+          <div className="flex flex-wrap gap-3">
+            <DurationCard
+              title="Manufacturing & Purchase"
+              startDate={fixture.stageMfgPurchaseStartedAt}
+              endDate={fixture.mfgPurchaseCompletedAt}
+              accentColor="indigo"
+            />
+            <DurationCard
+              title="Assembly"
+              startDate={fixture.assemblyStartedAt}
+              endDate={fixture.stageAssemblyCompletedAt}
+              accentColor="teal"
+            />
+          </div>
 
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-slate-500 py-2">
@@ -1211,87 +1353,89 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                               }
                             </span>
                           </th>
-                          {/* Drawing No — 160→144px (-10%), height 32→29px */}
-                          <th className="py-1.5 w-[144px] min-w-[144px]">
-                            <div className="relative">
-                              <input
-                                type="text"
-                                placeholder="Drawing No"
-                                value={filterDraft.drawingNo ?? ''}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => updateFilter('drawingNo', e.target.value)}
-                                style={{ height: '29px' }}
-                                className="w-full text-xs border border-slate-200 rounded px-2 pr-6 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300"
-                              />
-                              {filterDraft.drawingNo && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); updateFilter('drawingNo', '') }}
-                                  className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
-                                >
-                                  <X className="h-2.5 w-2.5" />
-                                </button>
-                              )}
-                            </div>
-                          </th>
-                          {/* Description — 220→198px (-10%), height 32→29px */}
-                          <th className="pl-8 pr-1 py-1.5 min-w-[198px]">
-                            <div className="relative">
-                              <input type="text" placeholder="Description" value={filterDraft.drawingDesc ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('drawingDesc', e.target.value)} style={{ height: '29px' }} className="w-full text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300" />
-                              {filterDraft.drawingDesc && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('drawingDesc', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
-                            </div>
-                          </th>
-                          {/* Qty / LH/RH / Status — spacers */}
-                          <th className="px-1 py-1.5 w-10" />
-                          <th className="px-1 py-1.5 w-10" />
-                          <th className="px-1 py-1.5 w-20" />
-                          {/* Pending Date — 133→106px (-20%) */}
-                          <th className="py-1.5 min-w-[106px]">
-                            <DateRangeFilter label="Pending Date" color="text-slate-600" range={pendingRange} onChange={(r) => applyDateRange(setPendingRange, 'pendingDateFrom', 'pendingDateTo', r)} />
-                          </th>
-                          {/* In Progress Date — 143→114px (-20%) */}
-                          <th className="py-1.5 min-w-[114px]">
-                            <DateRangeFilter label="In Progress Date" color="text-blue-600" range={inprogressRange} onChange={(r) => applyDateRange(setInprogressRange, 'inprogressDateFrom', 'inprogressDateTo', r)} />
-                          </th>
-                          {/* QC Date — 114→91px (-20%) */}
-                          <th className="py-1.5 min-w-[91px]">
-                            <DateRangeFilter label="QC Date" color="text-amber-600" range={qcRange} onChange={(r) => applyDateRange(setQcRange, 'qcDateFrom', 'qcDateTo', r)} />
-                          </th>
-                          {/* Received Date — 133→106px (-20%) */}
-                          <th className="py-1.5 min-w-[106px]">
-                            <DateRangeFilter label="Received Date" color="text-green-600" range={receivedRange} onChange={(r) => applyDateRange(setReceivedRange, 'receivedDateFrom', 'receivedDateTo', r)} />
-                          </th>
-                          {/* Std Item Code — 100→115px (+15%) */}
-                          <th className="px-1 py-1.5 w-[115px] min-w-[115px]">
-                            <div className="relative">
-                              <input type="text" placeholder="Std Item Code" value={filterDraft.stdPartNo ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdPartNo', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
-                              {filterDraft.stdPartNo && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdPartNo', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
-                            </div>
-                          </th>
-                          {/* Std Name — 110→127px (+15%) */}
-                          <th className="px-1 py-1.5 w-[127px] min-w-[127px]">
-                            <div className="relative">
-                              <input type="text" placeholder="Std Part Name" value={filterDraft.stdName ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdName', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
-                              {filterDraft.stdName && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdName', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
-                            </div>
-                          </th>
-                          {/* Std Make — 90→104px (+15%) */}
-                          <th className="px-1 py-1.5 w-[104px] min-w-[104px]">
-                            <div className="relative">
-                              <input type="text" placeholder="Std Make" value={filterDraft.stdMake ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdMake', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
-                              {filterDraft.stdMake && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdMake', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
-                            </div>
-                          </th>
+                          {/* Drawing No / Description / date filters — only visible to roles that can see manufactured parts */}
+                          {capabilities.showMfgParts && (
+                            <>
+                              <th className="py-1.5 w-[144px] min-w-[144px]">
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    placeholder="Drawing No"
+                                    value={filterDraft.drawingNo ?? ''}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => updateFilter('drawingNo', e.target.value)}
+                                    style={{ height: '29px' }}
+                                    className="w-full text-xs border border-slate-200 rounded px-2 pr-6 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300"
+                                  />
+                                  {filterDraft.drawingNo && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); updateFilter('drawingNo', '') }}
+                                      className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                                    >
+                                      <X className="h-2.5 w-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </th>
+                              <th className="pl-8 pr-1 py-1.5 min-w-[198px]">
+                                <div className="relative">
+                                  <input type="text" placeholder="Description" value={filterDraft.drawingDesc ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('drawingDesc', e.target.value)} style={{ height: '29px' }} className="w-full text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white placeholder-slate-300" />
+                                  {filterDraft.drawingDesc && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('drawingDesc', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                                </div>
+                              </th>
+                              {/* Qty / LH/RH / Status — spacers */}
+                              <th className="px-1 py-1.5 w-10" />
+                              <th className="px-1 py-1.5 w-10" />
+                              <th className="px-1 py-1.5 w-20" />
+                              <th className="py-1.5 min-w-[106px]">
+                                <DateRangeFilter label="Pending Date" color="text-slate-600" range={pendingRange} onChange={(r) => applyDateRange(setPendingRange, 'pendingDateFrom', 'pendingDateTo', r)} />
+                              </th>
+                              <th className="py-1.5 min-w-[114px]">
+                                <DateRangeFilter label="In Progress Date" color="text-blue-600" range={inprogressRange} onChange={(r) => applyDateRange(setInprogressRange, 'inprogressDateFrom', 'inprogressDateTo', r)} />
+                              </th>
+                              <th className="py-1.5 min-w-[91px]">
+                                <DateRangeFilter label="QC Date" color="text-amber-600" range={qcRange} onChange={(r) => applyDateRange(setQcRange, 'qcDateFrom', 'qcDateTo', r)} />
+                              </th>
+                              <th className="py-1.5 min-w-[106px]">
+                                <DateRangeFilter label="Received Date" color="text-green-600" range={receivedRange} onChange={(r) => applyDateRange(setReceivedRange, 'receivedDateFrom', 'receivedDateTo', r)} />
+                              </th>
+                            </>
+                          )}
+                          {/* Std Item Code / Std Name / Std Make — only visible to roles that can see standard parts */}
+                          {capabilities.showStdParts && (
+                            <>
+                              <th className="px-1 py-1.5 w-[115px] min-w-[115px]">
+                                <div className="relative">
+                                  <input type="text" placeholder="Std Item Code" value={filterDraft.stdPartNo ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdPartNo', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                                  {filterDraft.stdPartNo && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdPartNo', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                                </div>
+                              </th>
+                              <th className="px-1 py-1.5 w-[127px] min-w-[127px]">
+                                <div className="relative">
+                                  <input type="text" placeholder="Std Part Name" value={filterDraft.stdName ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdName', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                                  {filterDraft.stdName && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdName', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                                </div>
+                              </th>
+                              <th className="px-1 py-1.5 w-[104px] min-w-[104px]">
+                                <div className="relative">
+                                  <input type="text" placeholder="Std Make" value={filterDraft.stdMake ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateFilter('stdMake', e.target.value)} className="w-full h-8 text-xs border border-slate-200 rounded px-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white placeholder-slate-300" />
+                                  {filterDraft.stdMake && <button type="button" onClick={(e) => { e.stopPropagation(); updateFilter('stdMake', '') }} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="h-2.5 w-2.5" /></button>}
+                                </div>
+                              </th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                     </table>
                   </div>
 
                   {/* Global Actions */}
-                  {(capabilities.canCreateVendorPo || capabilities.canCreateSupplierPo || capabilities.canMarkQualityChecked || capabilities.canMarkReceived) && (
+                  {(capabilities.canCreateVendorPo || capabilities.canCreateSupplierPo || capabilities.canMarkQualityChecked || capabilities.canMarkReceived || capabilities.canCollectAssembly) && (
                     <div className="flex flex-wrap gap-4 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
-                      {/* Manufactured Parts Bulk Actions */}
-                      {(capabilities.canCreateVendorPo || capabilities.canMarkQualityChecked || capabilities.canMarkReceived) && (
+
+                      {/* Manufactured / Assembly Bulk Actions */}
+                      {(capabilities.canCreateVendorPo || capabilities.canMarkQualityChecked || capabilities.canMarkReceived || capabilities.canCollectAssembly) && (
                         <div className="flex-1 min-w-[300px] space-y-2">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1.5">
@@ -1325,31 +1469,40 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                             </div>
                           )}
 
-                          {capabilities.canMarkReceived && (
+                          {(capabilities.canMarkReceived || capabilities.canCollectAssembly) && (
                             <div className="flex flex-wrap gap-2 pt-1">
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="bg-teal-700 hover:bg-teal-800 h-8"
-                                disabled={!hasAnySelected}
-                                onClick={(e) => { e.stopPropagation(); setMarkReceivedOpen(true) }}
-                              >
-                                Mark as Received
-                                {hasAnySelected && (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 ml-1.5">
-                                    {selMfg.size + selStd.size}
-                                  </span>
-                                )}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="bg-indigo-600 hover:bg-indigo-700 h-8"
-                                disabled={!hasAnySelected}
-                                onClick={(e) => { e.stopPropagation(); setCollectAssemblyOpen(true) }}
-                              >
-                                Collected by Assembly
-                              </Button>
+                              {capabilities.canMarkReceived && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="bg-teal-700 hover:bg-teal-800 h-8"
+                                  disabled={!hasAnySelected}
+                                  onClick={(e) => { e.stopPropagation(); setMarkReceivedOpen(true) }}
+                                >
+                                  Mark as Received
+                                  {hasAnySelected && (
+                                    <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 ml-1.5">
+                                      {selMfg.size + selStd.size}
+                                    </span>
+                                  )}
+                                </Button>
+                              )}
+                              {capabilities.canCollectAssembly && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="bg-indigo-600 hover:bg-indigo-700 h-8"
+                                  disabled={!hasAnySelected}
+                                  onClick={(e) => { e.stopPropagation(); setCollectAssemblyOpen(true) }}
+                                >
+                                  Collected by Assembly
+                                  {hasAnySelected && (
+                                    <span className="inline-flex items-center justify-center rounded-full bg-white/25 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 ml-1.5">
+                                      {selMfg.size + selStd.size}
+                                    </span>
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1401,17 +1554,27 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
                         storeReceivingForPart={storeReceivingForPart}
                         qtyEditingForPart={qtyEditingForPart}
                         poMode={capabilities.canCreateSupplierPo}
+                        stdReceiveMode={capabilities.canMarkReceived || capabilities.canCollectAssembly}
                         stdSelectedIds={selStd}
                         onToggleStdPart={toggleStd}
-                        onSelectAllStd={() => setSelStd(new Set([...selStd, ...parts.std.filter(p => (p.purchaseQty ?? 0) > 0).map(p => p.id)]))}
+                        onSelectAllStd={() => {
+                          const ids = (capabilities.canMarkReceived || capabilities.canCollectAssembly)
+                            ? parts.std.map(p => p.id)
+                            : parts.std.filter(p => (p.purchaseQty ?? 0) > 0).map(p => p.id)
+                          setSelStd(new Set([...selStd, ...ids]))
+                        }}
                         onClearStd={() => setSelStd(new Set([...selStd].filter(id => !parts.std.some(p => p.id === id))))}
-                        showReceiveQtyCol={capabilities.canUpdateStdQty}
+                        showReceiveQtyCol={capabilities.canViewReceiveHistory || capabilities.canViewCollectHistory || capabilities.canUpdateStdQty}
                         showPriceEditCol={capabilities.canEditStdPrice}
                         priceDraftByLine={priceDraftByLine}
                         onPriceDraftChange={(lineId, value) => setPriceDraftByLine((prev) => ({ ...prev, [lineId]: value }))}
                         onSavePrice={(lineId) => void handleSaveLinePrice(lineId)}
                         savingPriceId={savingPriceLineId}
                         assemblyUserById={assemblyUserById}
+                        onViewReceiveHistoryForPart={capabilities.canViewReceiveHistory ? (p) => setHistoryDlg({ displayLabel: p.drawingNo, drawingNumber: p.drawingNo, kind: 'receive' }) : undefined}
+                        onViewCollectHistoryForPart={capabilities.canViewCollectHistory ? (p) => setHistoryDlg({ displayLabel: p.drawingNo, drawingNumber: p.drawingNo, kind: 'collect' }) : undefined}
+                        onViewCollectHistoryForStdPart={capabilities.canViewCollectHistory ? (p) => setHistoryDlg({ displayLabel: p.itemCode ?? p.id, fixtureBomId: p.id, kind: 'collect' }) : undefined}
+                        onViewReceiveHistoryForStdPart={capabilities.canViewReceiveHistory ? (p) => setHistoryDlg({ displayLabel: p.itemCode ?? p.id, fixtureBomId: p.id, kind: 'receive' }) : undefined}
                       />
                     ))}
                   </div>
@@ -1715,6 +1878,116 @@ function FixtureTreeRow({ fixture }: FixtureTreeRowProps) {
           fixtureId={fixture.id}
         />
       )}
+
+      {historyDlg && (
+        <BomQtyHistoryDialog
+          open={!!historyDlg}
+          onOpenChange={(v) => { if (!v) setHistoryDlg(null) }}
+          displayLabel={historyDlg.displayLabel}
+          drawingNumber={historyDlg.drawingNumber}
+          fixtureBomId={historyDlg.fixtureBomId}
+          kind={historyDlg.kind}
+        />
+      )}
+
+      {assemblyCompleteDlgOpen && capabilities.assemblyButtonVisible && (
+        <Dialog open={assemblyCompleteDlgOpen} onOpenChange={setAssemblyCompleteDlgOpen}>
+          <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle>Mark Assembly Complete</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to mark assembly as completed for fixture{' '}
+                <span className="font-semibold">{fixture.fixtureNumber}</span>? This will advance it from{' '}
+                <span className="font-semibold">Manufacturing & Purchase</span> to the{' '}
+                <span className="font-semibold">Assembly</span> stage. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setAssemblyCompleteDlgOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+                disabled={markAssemblyComplete.isPending}
+                onClick={async () => {
+                  await markAssemblyComplete.mutateAsync()
+                  setAssemblyCompleteDlgOpen(false)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {markAssemblyComplete.isPending ? 'Marking…' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {cmmCompleteDlgOpen && capabilities.cmmButtonVisible && (
+        <Dialog open={cmmCompleteDlgOpen} onOpenChange={setCmmCompleteDlgOpen}>
+          <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle>Mark CMM Complete</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to mark CMM as completed for fixture{' '}
+                <span className="font-semibold">{fixture.fixtureNumber}</span>? This will advance it from{' '}
+                <span className="font-semibold">Assembly</span> to the{' '}
+                <span className="font-semibold">CMM</span> stage. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setCmmCompleteDlgOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-teal-600 hover:bg-teal-700 gap-1.5"
+                disabled={markCmmComplete.isPending}
+                onClick={async () => {
+                  await markCmmComplete.mutateAsync()
+                  setCmmCompleteDlgOpen(false)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {markCmmComplete.isPending ? 'Marking…' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {dispatchCompleteDlgOpen && capabilities.dispatchButtonVisible && (
+        <Dialog open={dispatchCompleteDlgOpen} onOpenChange={setDispatchCompleteDlgOpen}>
+          <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle>Mark Dispatch Complete</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to mark dispatch as completed for fixture{' '}
+                <span className="font-semibold">{fixture.fixtureNumber}</span>? This will advance it from{' '}
+                <span className="font-semibold">CMM</span> to the{' '}
+                <span className="font-semibold">Dispatch</span> stage. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setDispatchCompleteDlgOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-blue-600 hover:bg-blue-700 gap-1.5"
+                disabled={markDispatchComplete.isPending}
+                onClick={async () => {
+                  await markDispatchComplete.mutateAsync()
+                  setDispatchCompleteDlgOpen(false)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {markDispatchComplete.isPending ? 'Marking…' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
@@ -1725,15 +1998,16 @@ interface BomTreeProps {
   projectName: string
   fixtures: FixtureSummary[]
   showRoot?: boolean
+  projectStartDate?: string | null
 }
 
-export function BomTree({ projectId, projectName, fixtures, showRoot = true }: BomTreeProps) {
+export function BomTree({ projectId, projectName, fixtures, showRoot = true, projectStartDate }: BomTreeProps) {
   const [rootOpen, setRootOpen] = useState(true)
 
   const fixtureList = (
     <div className="space-y-2">
       {fixtures.map((f) => (
-        <FixtureTreeRow key={f.id} fixture={f} projectId={projectId} />
+        <FixtureTreeRow key={f.id} fixture={f} projectId={projectId} projectStartDate={projectStartDate} />
       ))}
     </div>
   )

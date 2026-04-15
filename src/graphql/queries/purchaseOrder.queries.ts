@@ -32,6 +32,7 @@ export const GET_PURCHASE_ORDERS = `
         costingUpdatedDate
         completedDate
         enableCosting
+        sendPoEnabled
         isActive
         createdAt
         createdByUsername
@@ -74,12 +75,22 @@ export const GET_PO_ATTACHMENT_DOWNLOAD_URL = `
   }
 `
 export const PURCHASE_ORDERS_BY_FIXTURE = `
-  query PurchaseOrdersByFixture($fixtureId: String!, $poType: String, $partIds: [String!]) {
-    purchaseOrdersByFixture(fixtureId: $fixtureId, poType: $poType, partIds: $partIds) {
+  query PurchaseOrdersByFixture($fixtureId: String!, $poType: String, $partIds: [String!], $excludeStatuses: [String!]) {
+    purchaseOrdersByFixture(fixtureId: $fixtureId, poType: $poType, partIds: $partIds, excludeStatuses: $excludeStatuses) {
       id
       poNumber
+      title
+      poType
       poStatus
-      supplierName
+      projectId
+      vendorId
+      supplierId
+      poSendDate
+      costingUpdatedDate
+      completedDate
+      enableCosting
+      sendPoEnabled
+      isActive
       createdAt
       lineItems {
         fixtureBomId
@@ -131,6 +142,7 @@ export const GET_PURCHASE_ORDER = `
       costingUpdatedDate
       completedDate
       enableCosting
+      sendPoEnabled
       isActive
       createdAt
       modifiedAt

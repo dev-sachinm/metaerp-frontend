@@ -31,7 +31,10 @@ export const GET_BOM_VIEW_ITEM_CODE = `
       receivedDateFrom: $receivedDateFrom
       receivedDateTo: $receivedDateTo
     ) {
-      fixture { id fixtureNumber status }
+      fixture {
+        id fixtureNumber stage
+        stageInfo { stage label displayStatus enteredAt }
+      }
       manufacturedParts {
         id fixtureId drawingNo description qty receivedQuantity lhRh unitPrice status productId
         vendorId vendorName
@@ -43,7 +46,7 @@ export const GET_BOM_VIEW_ITEM_CODE = `
         id fixtureId productId unitId supplierId supplierName
         uom lhRh
         itemCode productName productMake
-        qty expectedQty
+        qty receivedQuantity expectedQty
         currentStock
         purchaseQty
         purchaseUnitPrice
